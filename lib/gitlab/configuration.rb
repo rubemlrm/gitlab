@@ -1,17 +1,19 @@
+# frozen_string_literal: true
+
 require 'gitlab/cli_helpers'
 module Gitlab
   # Defines constants and methods related to configuration.
   module Configuration
     # An array of valid keys in the options hash when configuring a Gitlab::API.
-    VALID_OPTIONS_KEYS = %i(endpoint private_token user_agent sudo httparty).freeze
+    VALID_OPTIONS_KEYS = %i[endpoint private_token user_agent sudo httparty].freeze
 
     # The user agent that will be sent to the API endpoint if none is set.
-    DEFAULT_USER_AGENT = "Gitlab Ruby Gem #{Gitlab::VERSION}".freeze
+    DEFAULT_USER_AGENT = "Gitlab Ruby Gem #{Gitlab::VERSION}"
 
     # @private
     attr_accessor(*VALID_OPTIONS_KEYS)
     # @private
-    alias_method :auth_token=, :private_token=
+    alias auth_token= private_token=
 
     # Sets all configuration options to their default values
     # when this module is extended.
@@ -44,11 +46,11 @@ module Gitlab
 
     # Allows HTTParty config to be specified in ENV using YAML hash.
     def get_httparty_config(options)
-      return options if options.nil?
+      return if options.nil?
 
       httparty = Gitlab::CLI::Helpers.yaml_load(options)
-
       raise ArgumentError, 'HTTParty config should be a Hash.' unless httparty.is_a? Hash
+
       Gitlab::CLI::Helpers.symbolize_keys httparty
     end
   end

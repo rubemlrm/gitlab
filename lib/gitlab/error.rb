@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Gitlab
   module Error
     # Custom error class for rescuing from all Gitlab errors.
@@ -11,6 +13,8 @@ module Gitlab
 
     # Custom error class for rescuing from HTTP response errors.
     class ResponseError < Error
+      POSSIBLE_MESSAGE_KEYS = %i[message error_description error].freeze
+
       def initialize(response)
         @response = response
         super(build_error_message)
@@ -37,12 +41,17 @@ module Gitlab
       # @return [String]
       def build_error_message
         parsed_response = @response.parsed_response
-        message = parsed_response.respond_to?(:message) ? parsed_response.message : parsed_response['message']
-        message = parsed_response.respond_to?(:error) ? parsed_response.error : parsed_response['error'] unless message
-
+        message = check_error_keys(parsed_response)
         "Server responded with code #{@response.code}, message: " \
         "#{handle_message(message)}. " \
         "Request URI: #{@response.request.base_uri}#{@response.request.path}"
+      end
+
+      # Error keys vary across the API, find the first key that the parsed_response
+      # object responds to and return that, otherwise return the original.
+      def check_error_keys(resp)
+        key = POSSIBLE_MESSAGE_KEYS.find { |k| resp.respond_to?(k) }
+        key ? resp.send(key) : resp
       end
 
       # Handle error response message in case of nested hashes
@@ -50,7 +59,7 @@ module Gitlab
         case message
         when Gitlab::ObjectifiedHash
           message.to_h.sort.map do |key, val|
-            "'#{key}' #{(val.is_a?(Hash) ? val.sort.map { |k, v| "(#{k}: #{v.join(' ')})" } : val).join(' ')}"
+            "'#{key}' #{(val.is_a?(Hash) ? val.sort.map { |k, v| "(#{k}: #{v.join(' ')})" } : [val].flatten).join(' ')}"
           end.join(', ')
         when Array
           message.join(' ')
