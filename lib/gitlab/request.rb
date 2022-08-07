@@ -8,6 +8,7 @@ module Gitlab
   class Request
     include HTTParty
     format :json
+    maintain_method_across_redirects true
     headers 'Accept' => 'application/json', 'Content-Type' => 'application/x-www-form-urlencoded'
     parser(proc { |body, _| parse(body) })
 
@@ -25,8 +26,6 @@ module Gitlab
         true
       elsif !body
         false
-      elsif body.nil?
-        false
       else
         raise Error::Parsing, "Couldn't parse a response body"
       end
@@ -41,28 +40,34 @@ module Gitlab
 
     %w[get post put delete].each do |method|
       define_method method do |path, options = {}|
-        httparty_config(options)
-        authorization_header(options)
-        validate self.class.send(method, @endpoint + path, options)
+        params = options.dup
+
+        httparty_config(params)
+
+        unless params[:unauthenticated]
+          params[:headers] ||= {}
+          params[:headers].merge!(authorization_header)
+        end
+
+        retries_left = params[:ratelimit_retries] || 3
+        begin
+          response = self.class.send(method, endpoint + path, params)
+          validate response
+        rescue Gitlab::Error::TooManyRequests => e
+          retries_left -= 1
+          raise e if retries_left.zero?
+
+          wait_time = response.headers['Retry-After'] || 2
+          sleep(wait_time.to_i)
+          retry
+        end
       end
     end
 
     # Checks the response code for common errors.
     # Returns parsed response for successful requests.
     def validate(response)
-      error_klass = case response.code
-                    when 400 then Error::BadRequest
-                    when 401 then Error::Unauthorized
-                    when 403 then Error::Forbidden
-                    when 404 then Error::NotFound
-                    when 405 then Error::MethodNotAllowed
-                    when 409 then Error::Conflict
-                    when 422 then Error::Unprocessable
-                    when 500 then Error::InternalServerError
-                    when 502 then Error::BadGateway
-                    when 503 then Error::ServiceUnavailable
-                    end
-
+      error_klass = Error.klass(response)
       raise error_klass, response if error_klass
 
       parsed = response.parsed_response
@@ -74,28 +79,25 @@ module Gitlab
     # Sets a base_uri and default_params for requests.
     # @raise [Error::MissingCredentials] if endpoint not set.
     def request_defaults(sudo = nil)
-      self.class.default_params sudo: sudo
-      raise Error::MissingCredentials, 'Please set an endpoint to API' unless @endpoint
+      raise Error::MissingCredentials, 'Please set an endpoint to API' unless endpoint
 
+      self.class.default_params sudo: sudo
       self.class.default_params.delete(:sudo) if sudo.nil?
     end
 
     private
 
-    # Sets a PRIVATE-TOKEN or Authorization header for requests.
+    # Returns an Authorization header hash
     #
-    # @param [Hash] options A customizable set of options.
-    # @option options [Boolean] :unauthenticated true if the API call does not require user authentication.
     # @raise [Error::MissingCredentials] if private_token and auth_token are not set.
-    def authorization_header(options)
-      return if options[:unauthenticated]
-      raise Error::MissingCredentials, 'Please provide a private_token or auth_token for user' unless @private_token
+    def authorization_header
+      raise Error::MissingCredentials, 'Please provide a private_token or auth_token for user' unless private_token
 
-      options[:headers] = if @private_token.size < 21
-                            { 'PRIVATE-TOKEN' => @private_token }
-                          else
-                            { 'Authorization' => "Bearer #{@private_token}" }
-                          end
+      if private_token.size < 21
+        { 'PRIVATE-TOKEN' => private_token }
+      else
+        { 'Authorization' => "Bearer #{private_token}" }
+      end
     end
 
     # Set HTTParty configuration

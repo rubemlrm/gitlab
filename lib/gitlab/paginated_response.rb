@@ -42,18 +42,20 @@ module Gitlab
       end
     end
 
-    def auto_paginate
-      response = block_given? ? nil : []
-      each_page do |page|
-        if block_given?
-          page.each do |item|
-            yield item
-          end
-        else
-          response += page
-        end
-      end
-      response
+    def lazy_paginate
+      to_enum(:each_page).lazy.flat_map(&:to_ary)
+    end
+
+    def auto_paginate(&block)
+      return lazy_paginate.to_a unless block
+
+      lazy_paginate.each(&block)
+    end
+
+    def paginate_with_limit(limit, &block)
+      return lazy_paginate.take(limit).to_a unless block
+
+      lazy_paginate.take(limit).each(&block)
     end
 
     def last_page?
@@ -64,8 +66,7 @@ module Gitlab
     def last_page
       return nil if @client.nil? || !has_last_page?
 
-      path = @links.last.sub(/#{@client.endpoint}/, '')
-      @client.get(path)
+      @client.get(client_relative_path(@links.last))
     end
 
     def first_page?
@@ -76,8 +77,7 @@ module Gitlab
     def first_page
       return nil if @client.nil? || !has_first_page?
 
-      path = @links.first.sub(/#{@client.endpoint}/, '')
-      @client.get(path)
+      @client.get(client_relative_path(@links.first))
     end
 
     def next_page?
@@ -88,8 +88,7 @@ module Gitlab
     def next_page
       return nil if @client.nil? || !has_next_page?
 
-      path = @links.next.sub(/#{@client.endpoint}/, '')
-      @client.get(path)
+      @client.get(client_relative_path(@links.next))
     end
 
     def prev_page?
@@ -100,8 +99,12 @@ module Gitlab
     def prev_page
       return nil if @client.nil? || !has_prev_page?
 
-      path = @links.prev.sub(/#{@client.endpoint}/, '')
-      @client.get(path)
+      @client.get(client_relative_path(@links.prev))
+    end
+
+    def client_relative_path(link)
+      client_endpoint_path = URI.parse(@client.endpoint).request_uri # api/v4
+      URI.parse(link).request_uri.sub(client_endpoint_path, '')
     end
   end
 end

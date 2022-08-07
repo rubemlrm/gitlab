@@ -30,12 +30,8 @@ class Gitlab::Shell
     private
 
     def history_file
-      if defined?(@history_file)
-        @history_file
-      else
-        @history_file = File.open(history_file_path, 'w', 0o600).tap do |file|
-          file.sync = true
-        end
+      @history_file ||= File.open(history_file_path, 'w', 0o600).tap do |file|
+        file.sync = true
       end
     rescue Errno::EACCES
       warn 'History not saved; unable to open your history file for writing.'
@@ -46,12 +42,12 @@ class Gitlab::Shell
       File.expand_path(@file_path)
     end
 
-    def read_from_file
+    def read_from_file(&block)
       path = history_file_path
 
-      File.foreach(path) { |line| yield(line) } if File.exist?(path)
-    rescue StandardError => error
-      warn "History file not loaded: #{error.message}"
+      File.foreach(path, &block) if File.exist?(path)
+    rescue StandardError => e
+      warn "History file not loaded: #{e.message}"
     end
 
     def max_lines

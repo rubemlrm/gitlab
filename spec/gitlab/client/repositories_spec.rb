@@ -2,13 +2,14 @@
 
 require 'spec_helper'
 
-describe Gitlab::Client do
+RSpec.describe Gitlab::Client do
   it { is_expected.to respond_to :repo_tags }
   it { is_expected.to respond_to :repo_create_tag }
   it { is_expected.to respond_to :repo_branches }
   it { is_expected.to respond_to :repo_branch }
   it { is_expected.to respond_to :repo_tree }
   it { is_expected.to respond_to :repo_compare }
+  it { is_expected.to respond_to :repo_contributors }
 
   describe '.tags' do
     before do
@@ -109,6 +110,58 @@ describe Gitlab::Client do
     it 'gets common ancestor of the two refs' do
       expect(@response).to be_kind_of Gitlab::ObjectifiedHash
       expect(@response.id).to eq '1a0b36b3cdad1d2ee32457c102a8c0b7056fa863'
+    end
+  end
+
+  describe '.contributors' do
+    before do
+      stub_get('/projects/3/repository/contributors', 'contributors')
+      @contributors = Gitlab.contributors(3)
+    end
+
+    it 'gets the correct resource' do
+      expect(a_get('/projects/3/repository/contributors')).to have_been_made
+    end
+
+    it 'returns a paginated response of repository contributors' do
+      expect(@contributors).to be_a Gitlab::PaginatedResponse
+      expect(@contributors.first.name).to eq('Dmitriy Zaporozhets')
+      expect(@contributors.first.commits).to eq(117)
+    end
+  end
+
+  describe '.generate_changelog' do
+    before do
+      stub_post('/projects/3/repository/changelog', 'generate_changelog')
+        .with(body: { version: 'v1.0.0', branch: 'main' })
+      @changelog = Gitlab.generate_changelog(3, 'v1.0.0', branch: 'main')
+    end
+
+    it 'gets the correct resource' do
+      expect(a_post('/projects/3/repository/changelog')
+        .with(body: { version: 'v1.0.0', branch: 'main' })).to have_been_made
+    end
+
+    it 'returns successful result' do
+      expect(@changelog).to be_truthy
+    end
+  end
+
+  describe '.get_changelog' do
+    before do
+      stub_get('/projects/3/repository/changelog', 'changelog')
+        .with(body: { version: 'v1.0.0' })
+      @changelog = Gitlab.get_changelog(3, 'v1.0.0')
+    end
+
+    it 'gets the correct resource' do
+      expect(a_get('/projects/3/repository/changelog')
+        .with(body: { version: 'v1.0.0' })).to have_been_made
+    end
+
+    it 'returns changelog notes' do
+      expect(@changelog).to be_kind_of Gitlab::ObjectifiedHash
+      expect(@changelog.notes).to be_a String
     end
   end
 end

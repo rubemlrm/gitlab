@@ -2,7 +2,7 @@
 
 require 'spec_helper'
 
-describe Gitlab::Client do
+RSpec.describe Gitlab::Client do
   it { is_expected.to respond_to :repo_commits }
   it { is_expected.to respond_to :repo_commit }
   it { is_expected.to respond_to :repo_commit_diff }
@@ -15,13 +15,13 @@ describe Gitlab::Client do
   describe '.commits' do
     before do
       stub_get('/projects/3/repository/commits', 'project_commits')
-        .with(query: { ref_name: 'api' })
-      @commits = Gitlab.commits(3, ref_name: 'api')
+        .with(query: { ref: 'api' })
+      @commits = Gitlab.commits(3, ref: 'api')
     end
 
     it 'gets the correct resource' do
       expect(a_get('/projects/3/repository/commits')
-        .with(query: { ref_name: 'api' })).to have_been_made
+        .with(query: { ref: 'api' })).to have_been_made
     end
 
     it 'returns a paginated response of repository commits' do
@@ -46,21 +46,107 @@ describe Gitlab::Client do
     end
   end
 
-  describe '.cherry_pick_commit' do
+  describe '.commit_refs' do
     before do
-      stub_post('/projects/3/repository/commits/6104942438c14ec7bd21c6cd5bd995272b3faff6/cherry_pick', 'project_commit').with(body: { branch: 'master' })
-      @cherry_pick_commit = Gitlab.cherry_pick_commit(3, '6104942438c14ec7bd21c6cd5bd995272b3faff6', 'master')
+      stub_get('/projects/3/repository/commits/0b4cd14ccc6a5c392526df719d29baf4315a4bbb/refs', 'project_commit_refs')
+      @refs = Gitlab.commit_refs(3, '0b4cd14ccc6a5c392526df719d29baf4315a4bbb')
     end
 
     it 'gets the correct resource' do
-      expect(a_post('/projects/3/repository/commits/6104942438c14ec7bd21c6cd5bd995272b3faff6/cherry_pick')
-        .with(body: { branch: 'master' }))
+      expect(a_get('/projects/3/repository/commits/0b4cd14ccc6a5c392526df719d29baf4315a4bbb/refs'))
         .to have_been_made
     end
 
-    it 'returns the correct response' do
-      expect(@cherry_pick_commit).to be_a Gitlab::ObjectifiedHash
-      expect(@cherry_pick_commit.id).to eq('6104942438c14ec7bd21c6cd5bd995272b3faff6')
+    it 'returns an Array of refs' do
+      expect(@refs.map(&:to_h))
+        .to include('type' => 'branch', 'name' => '12-1-stable')
+        .and include('type' => 'tag', 'name' => 'v12.1.0')
+    end
+  end
+
+  describe '.cherry_pick_commit' do
+    context 'when success' do
+      before do
+        stub_post('/projects/3/repository/commits/6104942438c14ec7bd21c6cd5bd995272b3faff6/cherry_pick', 'project_commit').with(body: { branch: 'master' })
+        @cherry_pick_commit = Gitlab.cherry_pick_commit(3, '6104942438c14ec7bd21c6cd5bd995272b3faff6', 'master')
+      end
+
+      it 'gets the correct resource' do
+        expect(a_post('/projects/3/repository/commits/6104942438c14ec7bd21c6cd5bd995272b3faff6/cherry_pick')
+          .with(body: { branch: 'master' }))
+          .to have_been_made
+      end
+
+      it 'returns the correct response' do
+        expect(@cherry_pick_commit).to be_a Gitlab::ObjectifiedHash
+        expect(@cherry_pick_commit.id).to eq('6104942438c14ec7bd21c6cd5bd995272b3faff6')
+      end
+    end
+
+    context 'when failure' do
+      it 'includes the error_code' do
+        stub_post('/projects/3/repository/commits/6104942438c14ec7bd21c6cd5bd995272b3faff6/cherry_pick', 'cherry_pick_commit_failure', 400)
+
+        expect { Gitlab.cherry_pick_commit(3, '6104942438c14ec7bd21c6cd5bd995272b3faff6', 'master') }.to raise_error(Gitlab::Error::BadRequest) do |ex|
+          expect(ex.error_code).to eq('conflict')
+        end
+      end
+    end
+
+    context 'with additional options' do
+      it 'passes additional options' do
+        stub_post('/projects/3/repository/commits/6104942438c14ec7bd21c6cd5bd995272b3faff6/cherry_pick', 'project_commit')
+          .with(body: { branch: 'master', dry_run: true })
+
+        Gitlab.cherry_pick_commit(3, '6104942438c14ec7bd21c6cd5bd995272b3faff6', 'master', dry_run: true)
+
+        expect(a_post('/projects/3/repository/commits/6104942438c14ec7bd21c6cd5bd995272b3faff6/cherry_pick')
+          .with(body: { branch: 'master', dry_run: true }))
+          .to have_been_made
+      end
+    end
+  end
+
+  describe '.revert_commit' do
+    context 'when success' do
+      before do
+        stub_post('/projects/3/repository/commits/6104942438c14ec7bd21c6cd5bd995272b3faff6/revert', 'project_commit').with(body: { branch: 'master' })
+        @revert_commit = Gitlab.revert_commit(3, '6104942438c14ec7bd21c6cd5bd995272b3faff6', 'master')
+      end
+
+      it 'gets the correct resource' do
+        expect(a_post('/projects/3/repository/commits/6104942438c14ec7bd21c6cd5bd995272b3faff6/revert')
+          .with(body: { branch: 'master' }))
+          .to have_been_made
+      end
+
+      it 'returns the correct response' do
+        expect(@revert_commit).to be_a Gitlab::ObjectifiedHash
+        expect(@revert_commit.id).to eq('6104942438c14ec7bd21c6cd5bd995272b3faff6')
+      end
+    end
+
+    context 'when failure' do
+      it 'includes the error_code' do
+        stub_post('/projects/3/repository/commits/6104942438c14ec7bd21c6cd5bd995272b3faff6/revert', 'revert_commit_failure', 400)
+
+        expect { Gitlab.revert_commit(3, '6104942438c14ec7bd21c6cd5bd995272b3faff6', 'master') }.to raise_error(Gitlab::Error::BadRequest) do |ex|
+          expect(ex.error_code).to eq('empty')
+        end
+      end
+    end
+
+    context 'with additional options' do
+      it 'passes additional options' do
+        stub_post('/projects/3/repository/commits/6104942438c14ec7bd21c6cd5bd995272b3faff6/revert', 'project_commit')
+          .with(body: { branch: 'master', dry_run: true })
+
+        Gitlab.revert_commit(3, '6104942438c14ec7bd21c6cd5bd995272b3faff6', 'master', dry_run: true)
+
+        expect(a_post('/projects/3/repository/commits/6104942438c14ec7bd21c6cd5bd995272b3faff6/revert')
+          .with(body: { branch: 'master', dry_run: true }))
+          .to have_been_made
+      end
     end
   end
 
@@ -122,7 +208,7 @@ describe Gitlab::Client do
 
     it 'gets the correct resource' do
       expect(a_get('/projects/6/repository/commits/7d938cb8ac15788d71f4b67c035515a160ea76d8/statuses')
-        .with(query: { all: true }))
+        .with(query: { all: true })).to have_been_made
     end
 
     it 'gets statuses of a commit' do
@@ -138,13 +224,13 @@ describe Gitlab::Client do
   describe '.update_commit_status' do
     before do
       stub_post('/projects/6/statuses/7d938cb8ac15788d71f4b67c035515a160ea76d8', 'project_update_commit_status')
-        .with(query: { name: 'test', ref: 'decreased-spec', state: 'failed' })
+        .with(body: { name: 'test', ref: 'decreased-spec', state: 'failed' })
       @status = Gitlab.update_commit_status(6, '7d938cb8ac15788d71f4b67c035515a160ea76d8', 'failed', name: 'test', ref: 'decreased-spec')
     end
 
     it 'gets the correct resource' do
       expect(a_post('/projects/6/statuses/7d938cb8ac15788d71f4b67c035515a160ea76d8')
-        .with(query: { name: 'test', ref: 'decreased-spec', state: 'failed' }))
+        .with(body: { name: 'test', ref: 'decreased-spec', state: 'failed' })).to have_been_made
     end
 
     it 'returns information about the newly created status' do

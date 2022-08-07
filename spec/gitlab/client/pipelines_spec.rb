@@ -2,7 +2,7 @@
 
 require 'spec_helper'
 
-describe Gitlab::Client do
+RSpec.describe Gitlab::Client do
   describe '.pipelines' do
     before do
       stub_get('/projects/3/pipelines', 'pipelines')
@@ -38,6 +38,26 @@ describe Gitlab::Client do
     end
   end
 
+  describe '.pipeline_test_report' do
+    before do
+      stub_get('/projects/3/pipelines/46/test_report', 'pipeline_test_report')
+      @report = Gitlab.pipeline_test_report(3, 46)
+    end
+
+    it 'gets the correct resource' do
+      expect(a_get('/projects/3/pipelines/46/test_report')).to have_been_made
+    end
+
+    it 'returns a single pipeline' do
+      expect(@report).to be_a Gitlab::ObjectifiedHash
+    end
+
+    it 'returns information about a pipeline' do
+      expect(@report.total_time).to eq(5)
+      expect(@report.test_suites[0].name).to eq('Secure')
+    end
+  end
+
   describe '.create_pipeline' do
     let(:pipeline_path) { '/projects/3/pipeline?ref=master' }
 
@@ -67,7 +87,7 @@ describe Gitlab::Client do
 
       it 'calls with the correct body' do
         expected_body = 'variables[][key]=VAR1&variables[][value]=value&variables[][key]=VAR2&variables[][value]=value'
-        expect(a_post(pipeline_path).with(body: expected_body)).to have_been_made
+        expect(a_post(pipeline_path).with(body: expected_body.gsub('[', '%5B').gsub(']', '%5D'))).to have_been_made
       end
     end
   end
@@ -107,6 +127,17 @@ describe Gitlab::Client do
 
     it 'returns information about a pipeline' do
       expect(@pipeline_retry.user.name).to eq('Administrator')
+    end
+  end
+
+  describe '.delete_pipeline' do
+    before do
+      stub_delete('/projects/3/pipelines/46', 'empty')
+      Gitlab.delete_pipeline(3, 46)
+    end
+
+    it 'gets the correct resource' do
+      expect(a_delete('/projects/3/pipelines/46')).to have_been_made
     end
   end
 end

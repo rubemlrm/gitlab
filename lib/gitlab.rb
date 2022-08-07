@@ -21,11 +21,18 @@ module Gitlab
     Gitlab::Client.new(options)
   end
 
-  # Delegate to Gitlab::Client
-  def self.method_missing(method, *args, &block)
-    return super unless client.respond_to?(method)
+  if Gem::Version.new(RUBY_VERSION).release >= Gem::Version.new('3.0.0')
+    def self.method_missing(method, *args, **keywargs, &block)
+      return super unless client.respond_to?(method)
 
-    client.send(method, *args, &block)
+      client.send(method, *args, **keywargs, &block)
+    end
+  else
+    def self.method_missing(method, *args, &block)
+      return super unless client.respond_to?(method)
+
+      client.send(method, *args, &block)
+    end
   end
 
   # Delegate to Gitlab::Client
@@ -42,7 +49,8 @@ module Gitlab
   #
   # @return [Array<Symbol>]
   def self.actions
-    hidden = /endpoint|private_token|auth_token|user_agent|sudo|get|post|put|\Adelete\z|validate|request_defaults|httparty/
+    hidden =
+      /endpoint|private_token|auth_token|user_agent|sudo|get|post|put|\Adelete\z|validate\z|request_defaults|httparty/
     (Gitlab::Client.instance_methods - Object.methods).reject { |e| e[hidden] }
   end
 end

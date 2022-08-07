@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Gitlab::Client
-  # Defines methods related to labels.
+  # Defines methods related to project labels.
   # @see https://docs.gitlab.com/ce/api/labels.html
   module Labels
     # Gets a list of project's labels.
@@ -58,7 +58,7 @@ class Gitlab::Client
     # @param  [String] name The name of a label.
     # @return [Gitlab::ObjectifiedHash] Information about deleted label.
     def delete_label(project, name)
-      delete("/projects/#{url_encode project}/labels", body: { name: name })
+      delete("/projects/#{url_encode project}/labels/#{name}")
     end
 
     # Subscribes the user to a label to receive notifications

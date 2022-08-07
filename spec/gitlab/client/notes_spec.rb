@@ -2,7 +2,7 @@
 
 require 'spec_helper'
 
-describe Gitlab::Client do
+RSpec.describe Gitlab::Client do
   describe 'notes' do
     context 'when wall notes' do
       before do
@@ -60,6 +60,22 @@ describe Gitlab::Client do
 
       it 'gets the correct resource' do
         expect(a_get('/projects/3/merge_requests/7/notes')).to have_been_made
+      end
+
+      it 'returns a paginated response of notes' do
+        expect(@notes).to be_a Gitlab::PaginatedResponse
+        expect(@notes.first.author.name).to eq('John Smith')
+      end
+    end
+
+    context 'when epic notes' do
+      before do
+        stub_get('/groups/3/epics/7/notes', 'notes')
+        @notes = Gitlab.epic_notes(3, 7)
+      end
+
+      it 'gets the correct resource' do
+        expect(a_get('/groups/3/epics/7/notes')).to have_been_made
       end
 
       it 'returns a paginated response of notes' do
@@ -195,6 +211,23 @@ describe Gitlab::Client do
 
       it 'gets the correct resource' do
         expect(a_post('/projects/3/merge_requests/7/notes')
+          .with(body: { body: 'The solution is rather tricky' })).to have_been_made
+      end
+
+      it 'returns information about a created note' do
+        expect(@note.body).to eq('The solution is rather tricky')
+        expect(@note.author.name).to eq('John Smith')
+      end
+    end
+
+    context 'when epic note' do
+      before do
+        stub_post('/groups/3/epics/7/notes', 'note')
+        @note = Gitlab.create_epic_note(3, 7, 'The solution is rather tricky')
+      end
+
+      it 'gets the correct resource' do
+        expect(a_post('/groups/3/epics/7/notes')
           .with(body: { body: 'The solution is rather tricky' })).to have_been_made
       end
 

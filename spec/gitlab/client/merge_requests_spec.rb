@@ -2,7 +2,7 @@
 
 require 'spec_helper'
 
-describe Gitlab::Client do
+RSpec.describe Gitlab::Client do
   describe '.user_merge_requests' do
     before do
       stub_get('/merge_requests', 'merge_requests')
@@ -50,6 +50,17 @@ describe Gitlab::Client do
     end
   end
 
+  describe '.merge_request_participants' do
+    before do
+      stub_get('/projects/3/merge_requests/1/participants', 'participants')
+      Gitlab.merge_request_participants(3, 1)
+    end
+
+    it 'gets the correct resource' do
+      expect(a_get('/projects/3/merge_requests/1/participants')).to have_been_made
+    end
+  end
+
   describe '.merge_request_pipelines' do
     before do
       stub_get('/projects/3/merge_requests/1/pipelines', 'pipelines')
@@ -63,6 +74,18 @@ describe Gitlab::Client do
     it 'returns information about all pipelines in merge request' do
       expect(@pipelines.first.id).to eq(47)
       expect(@pipelines.first.status).to eq('pending')
+    end
+  end
+
+  describe '.create_merge_request_pipeline' do
+    before do
+      stub_post('/projects/3/merge_requests/2/pipelines', 'pipeline_create')
+    end
+
+    it 'returns information about created merge request pipeline' do
+      @pipeline = Gitlab.create_merge_request_pipeline(3, 2)
+      expect(@pipeline.yaml_errors).to be_nil
+      expect(@pipeline.status).to eq('pending')
     end
   end
 
@@ -292,7 +315,7 @@ describe Gitlab::Client do
 
     it 'posts the correct resource' do
       expect(a_post('/projects/3/merge_requests/2/discussions')
-        .with(body: 'body=Discussion&position[old_line]=1')).to have_been_made
+        .with(body: 'body=Discussion&position[old_line]=1'.gsub('[', '%5B').gsub(']', '%5D'))).to have_been_made
     end
 
     it 'returns information about the discussions' do
@@ -365,6 +388,21 @@ describe Gitlab::Client do
     end
   end
 
+  describe '.delete_merge_request' do
+    before do
+      stub_request(:delete, 'https://api.example.com/projects/3/merge_requests/2').to_return(body: '')
+      @merge_request = Gitlab.delete_merge_request(3, 2)
+    end
+
+    it 'deletes the correct resource' do
+      expect(a_delete('/projects/3/merge_requests/2')).to have_been_made
+    end
+
+    it 'returns nothing' do
+      expect(@merge_request).to be_falsy
+    end
+  end
+
   describe '.merge_request_diff_versions' do
     before do
       stub_get('/projects/3/merge_requests/105/versions', 'merge_request_diff_versions')
@@ -394,6 +432,23 @@ describe Gitlab::Client do
     it 'returns diff, with array of diffs in version' do
       expect(@diff.diffs).to be_a Array
       expect(@diff.diffs.first['old_path']).to eq('LICENSE')
+    end
+  end
+
+  describe '.rebase_merge_request' do
+    before do
+      stub_put('/projects/3/merge_requests/105/rebase', 'merge_request_rebase')
+        .with(body: { skip_ci: true })
+      @response = Gitlab.rebase_merge_request(3, 105, skip_ci: true)
+    end
+
+    it 'gets correct resource' do
+      expect(a_put('/projects/3/merge_requests/105/rebase')
+        .with(body: { skip_ci: true })).to have_been_made
+    end
+
+    it 'returns rebase in progress response' do
+      expect(@response.rebase_in_progress).to be_truthy
     end
   end
 end

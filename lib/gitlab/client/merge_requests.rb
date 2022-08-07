@@ -35,12 +35,16 @@ class Gitlab::Client
     #
     # @example
     #   Gitlab.merge_request(5, 36)
+    #   Gitlab.merge_request(5, 36, { include_diverged_commits_count: true })
     #
     # @param  [Integer, String] project The ID or name of a project.
     # @param  [Integer] id The ID of a merge request.
+    # @option options [Boolean] :render_html If true response includes rendered HTML for title and description.
+    # @option options [Boolean] :include_diverged_commits_count If true response includes the commits behind the target branch.
+    # @option options [Boolean] :include_rebase_in_progress If true response includes whether a rebase operation is in progress.
     # @return <Gitlab::ObjectifiedHash]
-    def merge_request(project, id)
-      get("/projects/#{url_encode project}/merge_requests/#{id}")
+    def merge_request(project, id, options = {})
+      get("/projects/#{url_encode project}/merge_requests/#{id}", query: options)
     end
 
     # Gets a list of merge request pipelines.
@@ -53,6 +57,37 @@ class Gitlab::Client
     # @return [Array<Gitlab::ObjectifiedHash>]
     def merge_request_pipelines(project, id)
       get("/projects/#{url_encode project}/merge_requests/#{id}/pipelines")
+    end
+
+    # Create a new pipeline for a merge request.
+    # A pipeline created via this endpoint doesnt run a regular branch/tag pipeline.
+    # It requires .gitlab-ci.yml to be configured with only: [merge_requests] to create jobs.
+    #
+    # The new pipeline can be:
+    #
+    # A detached merge request pipeline.
+    # A pipeline for merged results if the project setting is enabled.
+    #
+    # @example
+    #   Gitlab.create_merge_request_pipeline(5, 36)
+    #
+    # @param  [Integer, String] project The ID or name of a project.
+    # @param  [Integer] iid The internal ID of a merge request.
+    # @return [Gitlab::ObjectifiedHash]
+    def create_merge_request_pipeline(project, iid)
+      post("/projects/#{url_encode project}/merge_requests/#{iid}/pipelines")
+    end
+
+    # Get a list of merge request participants.
+    #
+    # @example
+    #   Gitlab.merge_request_participants(5, 36)
+    #
+    # @param  [Integer, String] project The ID or name of a project.
+    # @param  [Integer] id The ID of a merge request.
+    # @return [Array<Gitlab::ObjectifiedHash>]
+    def merge_request_participants(project, id)
+      get("/projects/#{url_encode project}/merge_requests/#{id}/participants")
     end
 
     # Creates a merge request.
@@ -69,8 +104,14 @@ class Gitlab::Client
     # @option options [String] :source_branch (required) The source branch name.
     # @option options [String] :target_branch (required) The target branch name.
     # @option options [Integer] :assignee_id (optional) The ID of a user to assign merge request.
+    # @option options [Array<Integer>] :assignee_ids (optional) The ID of the user(s) to assign the MR to. Set to 0 or provide an empty value to unassign all assignees.
+    # @option options [String] :description (optional) Description of MR. Limited to 1,048,576 characters.
     # @option options [Integer] :target_project_id (optional) The target project ID.
     # @option options [String] :labels (optional) Labels as a comma-separated list.
+    # @option options [Integer] :milestone_id (optional) The global ID of a milestone
+    # @option options [Boolean] :remove_source_branch (optional) Flag indicating if a merge request should remove the source branch when merging
+    # @option options [Boolean] :allow_collaboration (optional) Allow commits from members who can merge to the target branch
+    # @option options [Boolean] :squash (optional) Squash commits into a single commit when merging
     # @return [Gitlab::ObjectifiedHash] Information about created merge request.
     def create_merge_request(project, title, options = {})
       body = { title: title }.merge(options)
@@ -103,7 +144,12 @@ class Gitlab::Client
     # @param  [Integer, String] project The ID or name of a project.
     # @param  [Integer] id The ID of a merge request.
     # @param  [Hash] options A customizable set of options.
-    # @option options [String] :merge_commit_message Custom merge commit message
+    # @option options [String] :merge_commit_message(optional) Custom merge commit message
+    # @option options [String] :squash_commit_message(optional) Custom squash commit message
+    # @option options [Boolean] :squash(optional) if true the commits will be squashed into a single commit on merge
+    # @option options [Boolean] :should_remove_source_branch(optional) if true removes the source branch
+    # @option options [Boolean] :merge_when_pipeline_succeeds(optional) if true the MR is merged when the pipeline succeeds
+    # @option options [String] :sha(optional) if present, then this SHA must match the HEAD of the source branch, otherwise the merge will fail
     # @return [Gitlab::ObjectifiedHash] Information about updated merge request.
     def accept_merge_request(project, id, options = {})
       put("/projects/#{url_encode project}/merge_requests/#{id}/merge", body: options)
@@ -141,7 +187,7 @@ class Gitlab::Client
     # @param [Integer] project The ID of a project
     # @param [Integer] iid The internal ID of a merge request
     def merge_request_closes_issues(project_id, merge_request_iid)
-      get("/projects/#{project_id}/merge_requests/#{merge_request_iid}/closes_issues")
+      get("/projects/#{url_encode project_id}/merge_requests/#{merge_request_iid}/closes_issues")
     end
 
     # Subscribes to a merge request.
@@ -286,6 +332,18 @@ class Gitlab::Client
       delete("/projects/#{url_encode project}/merge_requests/#{merge_request_id}/discussions/#{discussion_id}/notes/#{note_id}")
     end
 
+    # Delete a merge request
+    #
+    # @example
+    #   Gitlab.delete_merge_request(5, 1)
+    #   Gitlab.delete_merge_request('gitlab', 1)
+    # @param  [Integer, String] project The ID or name of a project.
+    # @param  [Integer] id The ID of a merge request.
+    # @return [Gitlab::ObjectifiedHash] An empty response.
+    def delete_merge_request(project, merge_request_id)
+      delete("/projects/#{url_encode project}/merge_requests/#{merge_request_id}")
+    end
+
     # Gets a list of merge request diff versions
     #
     # @example
@@ -309,6 +367,20 @@ class Gitlab::Client
     # @return [Gitlab::ObjectifiedHash] Record of the specific diff
     def merge_request_diff_version(project, merge_request_id, version_id)
       get("/projects/#{url_encode project}/merge_requests/#{merge_request_id}/versions/#{version_id}")
+    end
+
+    # Rebase a merge request.
+    #
+    # @example
+    #   Gitlab.rebase_merge_request(5, 42, { skip_ci: true })
+    #
+    # @param  [Integer, String] project The ID or name of a project.
+    # @param  [Integer] id The ID of a merge request.
+    # @param  [Hash] options A customizable set of options.
+    # @option options [String] :skip_ci Set to true to skip creating a CI pipeline
+    # @return [Gitlab::ObjectifiedHash] Rebase progress status
+    def rebase_merge_request(project, id, options = {})
+      put("/projects/#{url_encode project}/merge_requests/#{id}/rebase", body: options)
     end
   end
 end

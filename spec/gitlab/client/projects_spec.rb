@@ -2,7 +2,7 @@
 
 require 'spec_helper'
 
-describe Gitlab::Client do
+RSpec.describe Gitlab::Client do
   it { is_expected.to respond_to :search_projects }
 
   describe '.projects' do
@@ -74,7 +74,7 @@ describe Gitlab::Client do
   describe '.create_project for user' do
     before do
       stub_post('/users', 'user')
-      @owner = Gitlab.create_user('john@example.com', 'pass', name: 'John Owner')
+      @owner = Gitlab.create_user('john@example.com', 'pass', 'john', name: 'John Owner')
       stub_post("/projects/user/#{@owner.id}", 'project_for_user')
       @project = Gitlab.create_project('Brute', user_id: @owner.id)
     end
@@ -167,6 +167,22 @@ describe Gitlab::Client do
     it 'returns a paginated response of team members' do
       expect(@team_members).to be_a Gitlab::PaginatedResponse
       expect(@team_members.first.name).to eq('John Smith')
+    end
+  end
+
+  describe '.all_members' do
+    before do
+      stub_get('/projects/3/members/all', 'team_members')
+      @all_members = Gitlab.all_members(3)
+    end
+
+    it 'gets the correct resource' do
+      expect(a_get('/projects/3/members/all')).to have_been_made
+    end
+
+    it 'returns a paginated response of all team members including inherited' do
+      expect(@all_members).to be_a Gitlab::PaginatedResponse
+      expect(@all_members.first.name).to eq('John Smith')
     end
   end
 
@@ -316,7 +332,7 @@ describe Gitlab::Client do
   end
 
   describe '.edit_project' do
-    context 'using project ID' do
+    context 'with project ID' do
       before do
         stub_put('/projects/3', 'project_edit').with(body: { name: 'Gitlab-edit' })
         @edited_project = Gitlab.edit_project(3, name: 'Gitlab-edit')
@@ -331,7 +347,7 @@ describe Gitlab::Client do
       end
     end
 
-    context 'using namespaced project path' do
+    context 'with namespaced project path' do
       it 'encodes the path properly' do
         stub = stub_put('/projects/namespace%2Fpath', 'project_edit').with(body: { name: 'Gitlab-edit' })
         Gitlab.edit_project('namespace/path', name: 'Gitlab-edit')
@@ -520,7 +536,7 @@ describe Gitlab::Client do
   end
 
   describe '.create_deploy_key' do
-    context 'no options' do
+    context 'without options' do
       before do
         stub_post('/projects/42/deploy_keys', 'project_key')
         @deploy_key = Gitlab.create_deploy_key(42, 'My Key', 'Key contents')
@@ -536,7 +552,7 @@ describe Gitlab::Client do
       end
     end
 
-    context 'some options' do
+    context 'with options' do
       before do
         stub_post('/projects/42/deploy_keys', 'project_key')
         @deploy_key = Gitlab.create_deploy_key(42, 'My Key', 'Key contents', can_push: true)
@@ -597,6 +613,47 @@ describe Gitlab::Client do
 
     it 'returns information about a disabled key' do
       expect(@deploy_key.id).to eq(2)
+    end
+  end
+
+  describe '.edit_deploy_key' do
+    context 'without options' do
+      before do
+        body = { title: 'New key name' }
+        stub_put('/projects/42/deploy_keys/2', 'project_key_edit').with(body: body)
+        @project_deploy_key = Gitlab.edit_deploy_key(42, 2, 'New key name')
+      end
+
+      it 'puts the correct resource' do
+        body = { title: 'New key name' }
+        expect(a_put('/projects/42/deploy_keys/2')
+          .with(body: body)).to have_been_made
+      end
+
+      it 'returns the correct updated information' do
+        expect(@project_deploy_key).to be_a Gitlab::ObjectifiedHash
+        expect(@project_deploy_key.title).to eq 'New key name'
+      end
+    end
+
+    context 'with options' do
+      before do
+        body = { title: 'New key name', can_push: true }
+        stub_put('/projects/42/deploy_keys/2', 'project_key_edit').with(body: body)
+        @project_deploy_key = Gitlab.edit_deploy_key(42, 2, 'New key name', can_push: true)
+      end
+
+      it 'puts the correct resource' do
+        body = { title: 'New key name', can_push: true }
+        expect(a_put('/projects/42/deploy_keys/2')
+          .with(body: body)).to have_been_made
+      end
+
+      it 'returns the correct updated information' do
+        expect(@project_deploy_key).to be_a Gitlab::ObjectifiedHash
+        expect(@project_deploy_key.title).to eq 'New key name'
+        expect(@project_deploy_key.can_push).to eq true
+      end
     end
   end
 
@@ -695,11 +752,11 @@ describe Gitlab::Client do
 
   describe '.upload_file' do
     let(:id) { 1 }
-    let(:file) { File.open(File::NULL, 'r') }
+    let(:file_fullpath) { File::NULL }
 
     before do
       stub_post("/projects/#{id}/uploads", 'upload_file')
-      @file = Gitlab.upload_file(id, file)
+      @file = Gitlab.upload_file(id, file_fullpath)
     end
 
     it 'gets the correct resource' do
@@ -749,6 +806,123 @@ describe Gitlab::Client do
       it 'gets the correct resource' do
         expect(a_get('/projects/3/templates/licenses/mit')).to have_been_made
       end
+    end
+  end
+
+  describe '.archive_project' do
+    before do
+      stub_post('/projects/3/archive', 'project_archive')
+      @archived_project = Gitlab.archive_project('3')
+    end
+
+    it 'gets the correct resource' do
+      expect(a_post('/projects/3/archive')).to have_been_made
+    end
+
+    it 'returns information about a archived project' do
+      expect(@archived_project.name).to eq('GitLab Community Edition')
+      expect(@archived_project.archived).to eq(true)
+    end
+  end
+
+  describe '.unarchive_project' do
+    before do
+      stub_post('/projects/3/unarchive', 'project_unarchive')
+      @unarchived_project = Gitlab.unarchive_project('3')
+    end
+
+    it 'gets the correct resource' do
+      expect(a_post('/projects/3/unarchive')).to have_been_made
+    end
+
+    it 'returns information about a unarchived project' do
+      expect(@unarchived_project.name).to eq('GitLab Community Edition')
+      expect(@unarchived_project.archived).to eq(false)
+    end
+  end
+
+  describe '.project_custom_attributes' do
+    before do
+      stub_get('/projects/2/custom_attributes', 'project_custom_attributes')
+      @custom_attributes = Gitlab.project_custom_attributes(2)
+    end
+
+    it 'gets the correct resource' do
+      expect(a_get('/projects/2/custom_attributes')).to have_been_made
+    end
+
+    it 'returns a information about a custom_attribute of project' do
+      expect(@custom_attributes.first.key).to eq 'somekey'
+      expect(@custom_attributes.last.value).to eq('somevalue2')
+    end
+  end
+
+  describe '.project_custom_attribute' do
+    before do
+      stub_get('/projects/2/custom_attributes/some_new_key', 'project_custom_attribute')
+      @custom_attribute = Gitlab.project_custom_attribute('some_new_key', 2)
+    end
+
+    it 'gets the correct resource' do
+      expect(a_get('/projects/2/custom_attributes/some_new_key')).to have_been_made
+    end
+
+    it 'returns a information about the single custom_attribute of project' do
+      expect(@custom_attribute.key).to eq 'some_new_key'
+      expect(@custom_attribute.value).to eq('some_new_value')
+    end
+  end
+
+  describe '.add_custom_attribute' do
+    describe 'with project ID' do
+      before do
+        stub_put('/projects/2/custom_attributes/some_new_key', 'project_custom_attribute')
+        @custom_attribute = Gitlab.add_project_custom_attribute('some_new_key', 'some_new_value', 2)
+      end
+
+      it 'gets the correct resource' do
+        body = { value: 'some_new_value' }
+        expect(a_put('/projects/2/custom_attributes/some_new_key').with(body: body)).to have_been_made
+        expect(a_put('/projects/2/custom_attributes/some_new_key')).to have_been_made
+      end
+
+      it 'returns information about a new custom attribute' do
+        expect(@custom_attribute.key).to eq 'some_new_key'
+        expect(@custom_attribute.value).to eq 'some_new_value'
+      end
+    end
+  end
+
+  describe '.delete_custom_attribute' do
+    describe 'with project ID' do
+      before do
+        stub_delete('/projects/2/custom_attributes/some_new_key', 'project_custom_attribute')
+        @custom_attribute = Gitlab.delete_project_custom_attribute('some_new_key', 2)
+      end
+
+      it 'gets the correct resource' do
+        expect(a_delete('/projects/2/custom_attributes/some_new_key')).to have_been_made
+      end
+
+      it 'returns information about a deleted custom_attribute' do
+        expect(@custom_attribute).to be_truthy
+      end
+    end
+  end
+
+  describe '.project_deploy_tokens' do
+    before do
+      stub_get('/projects/2/deploy_tokens', 'project_deploy_tokens')
+      @custom_attributes = Gitlab.project_deploy_tokens(2)
+    end
+
+    it 'gets the correct resource' do
+      expect(a_get('/projects/2/deploy_tokens')).to have_been_made
+    end
+
+    it 'returns a information about deploy tokens of project' do
+      expect(@custom_attributes.first.name).to eq 'foo'
+      expect(@custom_attributes.first.username).to eq 'gitlab+deploy-token-93'
     end
   end
 end

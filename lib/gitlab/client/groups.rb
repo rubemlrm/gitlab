@@ -24,9 +24,12 @@ class Gitlab::Client
     #   Gitlab.group(42)
     #
     # @param  [Integer] id The ID of a group.
+    # @param  [Hash] options A customizable set of options.
+    # @option options [Boolean] :with_custom_attributes Include custom attributes in response (admins only)
+    # @option options [Boolean] :with_projects Include details about group projects (default: true)
     # @return [Gitlab::ObjectifiedHash]
-    def group(id)
-      get("/groups/#{url_encode id}")
+    def group(id, options = {})
+      get("/groups/#{url_encode id}", query: options)
     end
 
     # Creates a new group.
@@ -68,6 +71,55 @@ class Gitlab::Client
       get("/groups/#{url_encode id}/members", query: options)
     end
 
+    # Gets a list of all group members including inherited members.
+    #
+    # @example
+    #   Gitlab.all_group_members(1)
+    #   Gitlab.all_group_members(1, { per_page: 40 })
+    #
+    # @param  [Integer] id The ID of a group.
+    # @param  [Hash] options A customizable set of options.
+    # @option options [Integer] :page The page number.
+    # @option options [Integer] :per_page The number of results per page.
+    # @return [Array<Gitlab::ObjectifiedHash>]
+    def all_group_members(id, options = {})
+      get("/groups/#{url_encode id}/members/all", query: options)
+    end
+
+    # Get a list of descendant groups of a group.
+    #
+    # @example
+    #   Gitlab.group_descendants(42)
+    #
+    # @param [Integer] id the ID of a group
+    # @param [Hash] options A customizable set of options.
+    # @option options [String] :skip_groups Skip the group IDs passed.
+    # @option options [String] :all_available Show all the groups you have access to (defaults to false for authenticated users).
+    # @option options [String] :search Return the list of authorized groups matching the search criteria.
+    # @option options [String] :order_by Order groups by name or path. Default is name.
+    # @option options [String] :sort Order groups in asc or desc order. Default is asc.
+    # @option options [String] :statistics Include group statistics (admins only).
+    # @option options [String] :owned Limit to groups owned by the current user.
+    # @return [Array<Gitlab::ObjectifiedHash>] List of all subgroups under a group
+    def group_descendants(id, options = {})
+      get("/groups/#{url_encode id}/descendant_groups", query: options)
+    end
+
+    # Get a list of group members that are billable.
+    #
+    # @example
+    #   Gitlab.group_billable_members(1)
+    #   Gitlab.group_billable_members(1, { per_page: 40 })
+    #
+    # @param  [Integer] id The ID of a group.
+    # @param  [Hash] options A customizable set of options.
+    # @option options [Integer] :page The page number.
+    # @option options [Integer] :per_page The number of results per page.
+    # @return [Array<Gitlab::ObjectifiedHash>]
+    def group_billable_members(id, options = {})
+      get("/groups/#{url_encode id}/billable_members", query: options)
+    end
+
     # Get details of a single group member.
     #
     # @example
@@ -78,6 +130,18 @@ class Gitlab::Client
     # @return [Gitlab::ObjectifiedHash] (id, username, name, email, state, access_level ...)
     def group_member(team_id, user_id)
       get("/groups/#{url_encode team_id}/members/#{user_id}")
+    end
+
+    # Gets a list of merge requests of a group.
+    #
+    # @example
+    #   Gitlab.group_merge_requests(5)
+    #
+    # @param  [Integer, String] group_id The ID or name of a group.
+    # @param  [Hash] options A customizable set of options.
+    # @return [Array<Gitlab::ObjectifiedHash>]
+    def group_merge_requests(group, options = {})
+      get("/groups/#{group}/merge_requests", query: options)
     end
 
     # Adds a user to group.
@@ -190,6 +254,105 @@ class Gitlab::Client
     # @return [Gitlab::ObjectifiedHash] Information about the edited group.
     def edit_group(id, options = {})
       put("/groups/#{url_encode id}", body: options)
+    end
+
+    # Gets a list of issues of a group.
+    #
+    # @example
+    #   Gitlab.group_issues(5)
+    #
+    # @param  [Integer, String] group_id The ID or name of a group.
+    # @param  [Hash] options A customizable set of options.
+    # @return [Array<Gitlab::ObjectifiedHash>]
+    def group_issues(group, options = {})
+      get("/groups/#{group}/issues", query: options)
+    end
+
+    # Sync group with LDAP
+    #
+    # @example
+    #   Gitlab.sync_ldap_group(1)
+    #
+    # @param [Integer] id The ID or name of a group.
+    # @return [Array<Gitlab::ObjectifiedHash>]
+    def sync_ldap_group(id)
+      post("/groups/#{url_encode id}/ldap_sync")
+    end
+
+    # Add LDAP group link
+    #
+    # @example
+    #   Gitlab.add_ldap_group_links(1, 'all', 50, 'ldap')
+    #
+    # @param  [Integer] id The ID of a group
+    # @param  [String] cn The CN of a LDAP group
+    # @param  [Integer] group_access Minimum access level for members of the LDAP group.
+    # @param  [String] provider LDAP provider for the LDAP group
+    # @return [Gitlab::ObjectifiedHash] Information about added ldap group link
+    def add_ldap_group_links(id, commonname, group_access, provider)
+      post("/groups/#{url_encode id}/ldap_group_links", body: { cn: commonname, group_access: group_access, provider: provider })
+    end
+
+    # Delete LDAP group link
+    #
+    # @example
+    #   Gitlab.delete_ldap_group_links(1, 'all')
+    #
+    # @param  [Integer] id The ID of a group
+    # @param  [String] cn The CN of a LDAP group
+    # @return [Gitlab::ObjectifiedHash] Empty hash
+    def delete_ldap_group_links(id, commonname, provider)
+      delete("/groups/#{url_encode id}/ldap_group_links/#{url_encode provider}/#{url_encode commonname}")
+    end
+
+    # Gets group custom_attributes.
+    #
+    # @example
+    #   Gitlab.group_custom_attributes(2)
+    #
+    # @param  [Integer] group_id The ID of a group.
+    # @return [Gitlab::ObjectifiedHash]
+    def group_custom_attributes(group_id)
+      get("/groups/#{group_id}/custom_attributes")
+    end
+
+    # Gets single group custom_attribute.
+    #
+    # @example
+    #   Gitlab.group_custom_attribute('key', 2)
+    #
+    # @param  [String] key The custom_attributes key
+    # @param  [Integer] group_id The ID of a group.
+    # @return [Gitlab::ObjectifiedHash]
+    def group_custom_attribute(key, group_id)
+      get("/groups/#{group_id}/custom_attributes/#{key}")
+    end
+
+    # Creates a new custom_attribute
+    #
+    # @example
+    #   Gitlab.add_custom_attribute('some_new_key', 'some_new_value', 2)
+    #
+    # @param  [String] key The custom_attributes key
+    # @param  [String] value The custom_attributes value
+    # @param  [Integer] group_id The ID of a group.
+    # @return [Gitlab::ObjectifiedHash]
+    def add_group_custom_attribute(key, value, group_id)
+      url = "/groups/#{group_id}/custom_attributes/#{key}"
+      put(url, body: { value: value })
+    end
+
+    # Delete custom_attribute
+    # Will delete a custom_attribute
+    #
+    # @example
+    #   Gitlab.delete_group_custom_attribute('somekey', 2)
+    #
+    # @param  [String] key The custom_attribute key to delete
+    # @param  [Integer] group_id The ID of a group.
+    # @return [Boolean]
+    def delete_group_custom_attribute(key, group_id = nil)
+      delete("/groups/#{group_id}/custom_attributes/#{key}")
     end
   end
 end

@@ -34,13 +34,24 @@ module Gitlab
         @response.parsed_response.message
       end
 
+      # Additional error context returned by some API endpoints
+      #
+      # @return [String]
+      def error_code
+        if @response.respond_to?(:error_code)
+          @response.error_code
+        else
+          ''
+        end
+      end
+
       private
 
       # Human friendly message.
       #
       # @return [String]
       def build_error_message
-        parsed_response = @response.parsed_response
+        parsed_response = classified_response
         message = check_error_keys(parsed_response)
         "Server responded with code #{@response.code}, message: " \
         "#{handle_message(message)}. " \
@@ -52,6 +63,25 @@ module Gitlab
       def check_error_keys(resp)
         key = POSSIBLE_MESSAGE_KEYS.find { |k| resp.respond_to?(k) }
         key ? resp.send(key) : resp
+      end
+
+      # Parse the body based on the classification of the body content type
+      #
+      # @return parsed response
+      def classified_response
+        if @response.respond_to?('headers')
+          @response.headers['content-type'] == 'text/plain' ? { message: @response.to_s } : @response.parsed_response
+        else
+          @response.parsed_response
+        end
+      rescue Gitlab::Error::Parsing
+        # Return stringified response when receiving a
+        # parsing error to avoid obfuscation of the
+        # api error.
+        #
+        # note: The Gitlab API does not always return valid
+        # JSON when there are errors.
+        @response.to_s
       end
 
       # Handle error response message in case of nested hashes
@@ -84,11 +114,17 @@ module Gitlab
     # Raised when API endpoint returns the HTTP status code 405.
     class MethodNotAllowed < ResponseError; end
 
+    # Raised when API endpoint returns the HTTP status code 406.
+    class NotAcceptable < ResponseError; end
+
     # Raised when API endpoint returns the HTTP status code 409.
     class Conflict < ResponseError; end
 
     # Raised when API endpoint returns the HTTP status code 422.
     class Unprocessable < ResponseError; end
+
+    # Raised when API endpoint returns the HTTP status code 429.
+    class TooManyRequests < ResponseError; end
 
     # Raised when API endpoint returns the HTTP status code 500.
     class InternalServerError < ResponseError; end
@@ -98,5 +134,37 @@ module Gitlab
 
     # Raised when API endpoint returns the HTTP status code 503.
     class ServiceUnavailable < ResponseError; end
+
+    # Raised when API endpoint returns the HTTP status code 522.
+    class ConnectionTimedOut < ResponseError; end
+
+    # HTTP status codes mapped to error classes.
+    STATUS_MAPPINGS = {
+      400 => BadRequest,
+      401 => Unauthorized,
+      403 => Forbidden,
+      404 => NotFound,
+      405 => MethodNotAllowed,
+      406 => NotAcceptable,
+      409 => Conflict,
+      422 => Unprocessable,
+      429 => TooManyRequests,
+      500 => InternalServerError,
+      502 => BadGateway,
+      503 => ServiceUnavailable,
+      522 => ConnectionTimedOut
+    }.freeze
+
+    # Returns error class that should be raised for this response. Returns nil
+    # if the response status code is not 4xx or 5xx.
+    #
+    # @param  [HTTParty::Response] response The response object.
+    # @return [Class<Error::ResponseError>, nil]
+    def self.klass(response)
+      error_klass = STATUS_MAPPINGS[response.code]
+      return error_klass if error_klass
+
+      ResponseError if response.server_error? || response.client_error?
+    end
   end
 end

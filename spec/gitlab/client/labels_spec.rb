@@ -2,7 +2,7 @@
 
 require 'spec_helper'
 
-describe Gitlab::Client do
+RSpec.describe Gitlab::Client do
   describe '.labels' do
     before do
       stub_get('/projects/3/labels', 'labels')
@@ -21,13 +21,12 @@ describe Gitlab::Client do
 
   describe '.delete' do
     before do
-      stub_delete('/projects/3/labels', 'label')
+      stub_delete('/projects/3/labels/Backlog', 'label')
       @label = Gitlab.delete_label(3, 'Backlog')
     end
 
     it 'gets the correct resource' do
-      expect(a_delete('/projects/3/labels')
-             .with(body: { name: 'Backlog' })).to have_been_made
+      expect(a_delete('/projects/3/labels/Backlog')).to have_been_made
     end
 
     it 'returns information about a deleted snippet' do

@@ -44,9 +44,12 @@ class Gitlab::Client
     #   Gitlab.project('gitlab')
     #
     # @param  [Integer, String] id The ID or path of a project.
+    # @param  options [string] :license Include project license data
+    # @param  options [string] :statistics Include project statistics.
+    # @param  options [string] :with_custom_attributes Include custom attributes in response. (admins only)
     # @return [Gitlab::ObjectifiedHash]
-    def project(id)
-      get("/projects/#{url_encode id}")
+    def project(id, options = {})
+      get("/projects/#{url_encode id}", query: options)
     end
 
     # Creates a new project.
@@ -67,7 +70,7 @@ class Gitlab::Client
     # @option options [Boolean] :issues_enabled The issues integration for a project (0 = false, 1 = true).
     # @option options [Boolean] :snippets_enabled The snippets integration for a project (0 = false, 1 = true).
     # @option options [Boolean] :merge_requests_enabled The merge requests functionality for a project (0 = false, 1 = true).
-    # @option options [Boolean] :public The setting for making a project public (0 = false, 1 = true).
+    # @option options [String] :visibility The setting for making a project public ('private', 'internal', 'public').
     # @option options [Integer] :user_id The user/owner id of a project.
     # @return [Gitlab::ObjectifiedHash] Information about created project.
     def create_project(name, options = {})
@@ -100,6 +103,22 @@ class Gitlab::Client
     # @return [Array<Gitlab::ObjectifiedHash>]
     def team_members(project, options = {})
       get("/projects/#{url_encode project}/members", query: options)
+    end
+
+    # Gets a list of all project team members including inherited members.
+    #
+    # @example
+    #   Gitlab.all_members(42)
+    #   Gitlab.all_members('gitlab')
+    #
+    # @param  [Integer, String] project The ID or path of a project.
+    # @param  [Hash] options A customizable set of options.
+    # @option options [String] :query The search query.
+    # @option options [Integer] :page The page number.
+    # @option options [Integer] :per_page The number of results per page.
+    # @return [Array<Gitlab::ObjectifiedHash>]
+    def all_members(project, options = {})
+      get("/projects/#{url_encode project}/members/all", query: options)
     end
 
     # Gets a project team member.
@@ -380,6 +399,20 @@ class Gitlab::Client
       post("/projects/#{url_encode project}/deploy_keys/#{key}/disable", body: { id: project, key_id: key })
     end
 
+    # Updates an existing deploy key.
+    #
+    # @example
+    #   Gitlab.edit_deploy_key(42, 66, 'New key name', can_push: false)
+    #
+    # @param  [Integer, String] project The ID or path of a project.
+    # @param  [Integer] id The ID of a deploy key.
+    # @param  [String] title The title of a deploy key.
+    # @param  [Hash] options A customizable set of options.
+    # @return [Gitlab::ObjectifiedHash] Information about created deploy key.
+    def edit_deploy_key(project, id, title, options = {})
+      put("/projects/#{url_encode project}/deploy_keys/#{id}", body: { title: title }.merge(options))
+    end
+
     # Deletes a deploy key from project.
     #
     # @example
@@ -505,6 +538,25 @@ class Gitlab::Client
       delete("/projects/#{url_encode id}/star")
     end
 
+    # Get a list of visible projects that the given user has starred.
+    # @see https://docs.gitlab.com/ee/api/projects.html#list-projects-starred-by-a-user
+    #
+    # @example
+    #   Gitlab.user_starred_projects(1)
+    #   Gitlab.user_starred_projects(1, { order_by: 'last_activity_at' })
+    #   Gitlab.user_starred_projects('username', { order_by: 'name', sort: 'asc' })
+    #
+    # @param  [Integer, String] user_id The ID or username of the user.
+    # @param  [Hash] options A customizable set of options.
+    # @option options [String] :per_page Number of projects to return per page
+    # @option options [String] :page The page to retrieve
+    # @option options [String] :order_by Return projects ordered by id, name, path, created_at, updated_at, or last_activity_at fields.
+    # @option options [String] :sort Return projects sorted in asc or desc order.
+    # @return [Array<Gitlab::ObjectifiedHash>]
+    def user_starred_projects(user_id, options = {})
+      get("/users/#{url_encode user_id}/starred_projects", query: options)
+    end
+
     # Get a list of visible projects for the given user.
     # @see https://docs.gitlab.com/ee/api/projects.html#list-user-projects
     #
@@ -529,14 +581,13 @@ class Gitlab::Client
     # @see https://docs.gitlab.com/ee/api/projects.html#upload-a-file
     #
     # @example
-    #   Gitlab.upload_file(1, File.open(File::NULL, 'r'))
-    #   File.open('myfile') { |file| Gitlab.upload_file(1, file) }
+    #   Gitlab.upload_file(1, '/full/path/to/avatar.jpg')
     #
     # @param  [Integer, String] id The ID or path of a project.
-    # @param  [File] The file you are interested to upload.
+    # @param  [String] file_fullpath The fullpath of the file you are interested to upload.
     # @return [Gitlab::ObjectifiedHash]
-    def upload_file(id, file)
-      post("/projects/#{url_encode id}/uploads", body: { file: file })
+    def upload_file(id, file_fullpath)
+      post("/projects/#{url_encode id}/uploads", body: { file: File.open(file_fullpath, 'r') })
     end
 
     # Get all project templates of a particular type
@@ -569,6 +620,89 @@ class Gitlab::Client
     # @return [Gitlab::ObjectifiedHash]
     def project_template(project, type, key, options = {})
       get("/projects/#{url_encode project}/templates/#{type}/#{key}", query: options)
+    end
+
+    # Archives a project.
+    #
+    # @example
+    #   Gitlab.archive_project(4)
+    #
+    # @param  [Integer, String] id The ID or path of a project.
+    # @return [Gitlab::ObjectifiedHash] Information about archived project.
+    def archive_project(id)
+      post("/projects/#{url_encode id}/archive")
+    end
+
+    # Unarchives a project.
+    #
+    # @example
+    #   Gitlab.unarchive_project(4)
+    #
+    # @param  [Integer, String] id The ID or path of a project.
+    # @return [Gitlab::ObjectifiedHash] Information about unarchived project.
+    def unarchive_project(id)
+      post("/projects/#{url_encode id}/unarchive")
+    end
+
+    # Gets project custom_attributes.
+    #
+    # @example
+    #   Gitlab.project_custom_attributes(2)
+    #
+    # @param  [Integer] project_id The ID of a project.
+    # @return [Gitlab::ObjectifiedHash]
+    def project_custom_attributes(project_id)
+      get("/projects/#{project_id}/custom_attributes")
+    end
+
+    # Gets single project custom_attribute.
+    #
+    # @example
+    #   Gitlab.project_custom_attribute(key, 2)
+    #
+    # @param  [String] key The custom_attributes key
+    # @param  [Integer] project_id The ID of a project.
+    # @return [Gitlab::ObjectifiedHash]
+    def project_custom_attribute(key, project_id)
+      get("/projects/#{project_id}/custom_attributes/#{key}")
+    end
+
+    # Creates a new custom_attribute
+    #
+    # @example
+    #   Gitlab.add_custom_attribute('some_new_key', 'some_new_value', 2)
+    #
+    # @param  [String] key The custom_attributes key
+    # @param  [String] value The custom_attributes value
+    # @param  [Integer] project_id The ID of a project.
+    # @return [Gitlab::ObjectifiedHash]
+    def add_project_custom_attribute(key, value, project_id)
+      url = "/projects/#{project_id}/custom_attributes/#{key}"
+      put(url, body: { value: value })
+    end
+
+    # Delete custom_attribute
+    # Will delete a custom_attribute
+    #
+    # @example
+    #   Gitlab.delete_project_custom_attribute('somekey', 2)
+    #
+    # @param  [String] key The custom_attribute key to delete
+    # @param  [Integer] project_id The ID of a project.
+    # @return [Boolean]
+    def delete_project_custom_attribute(key, project_id = nil)
+      delete("/projects/#{project_id}/custom_attributes/#{key}")
+    end
+
+    # List project deploy tokens
+    #
+    # @example
+    #   Gitlab.project_deploy_tokens(42)
+    #
+    # @param [Integer, String] id The ID or path of a project.
+    # @option options [Boolean] :active Limit by active status. Optional.
+    def project_deploy_tokens(project, options = {})
+      get("/projects/#{url_encode project}/deploy_tokens", query: options)
     end
   end
 end

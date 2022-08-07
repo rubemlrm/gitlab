@@ -37,11 +37,11 @@ class Gitlab::Client
     # @example
     #   Gitlab.create_user('joe@foo.org', 'secret', 'joe', { name: 'Joe Smith' })
     #   or
-    #   Gitlab.create_user('joe@foo.org', 'secret')
+    #   Gitlab.create_user('joe@foo.org', 'secret', 'joe')
     #
-    # @param  [String] email The email of a user.
-    # @param  [String] password The password of a user.
-    # @param  [String] username The username of a user.
+    # @param  [String] email(required) The email of a user.
+    # @param  [String] password(required) The password of a user.
+    # @param  [String] username(required) The username of a user.
     # @param  [Hash] options A customizable set of options.
     # @option options [String] :name The name of a user. Defaults to email.
     # @option options [String] :skype The skype of a user.
@@ -51,11 +51,9 @@ class Gitlab::Client
     # @return [Gitlab::ObjectifiedHash] Information about created user.
     def create_user(*args)
       options = args.last.is_a?(Hash) ? args.pop : {}
-      body = if args[2]
-               { email: args[0], password: args[1], username: args[2] }
-             else
-               { email: args[0], password: args[1], name: args[0] }
-             end
+      raise ArgumentError, 'Missing required parameters' unless args[2]
+
+      body = { email: args[0], password: args[1], username: args[2], name: args[0] }
       body.merge!(options)
       post('/users', body: body)
     end
@@ -112,6 +110,17 @@ class Gitlab::Client
       post("/users/#{user_id}/unblock")
     end
 
+    # Approves the specified user. Available only for admin.
+    #
+    # @example
+    #   Gitlab.approve_user(15)
+    #
+    # @param [Integer] user_id The Id of user
+    # @return [Boolean] success or not
+    def approve_user(user_id)
+      post("/users/#{user_id}/approve")
+    end
+
     # Creates a new user session.
     #
     # @example
@@ -123,6 +132,20 @@ class Gitlab::Client
     # @note This method doesn't require private_token to be set.
     def session(email, password)
       post('/session', body: { email: email, password: password }, unauthenticated: true)
+    end
+
+    # Gets a list of user activities (for admin access only).
+    #
+    # @example
+    #   Gitlab.activities
+    #
+    # @param  [Hash] options A customizable set of options.
+    # @option options [Integer] :page The page number.
+    # @option options [Integer] :per_page The number of results per page.
+    # @option options [String] :from The start date for paginated results.
+    # @return [Array<Gitlab::ObjectifiedHash>]
+    def activities(options = {})
+      get('/user/activities', query: options)
     end
 
     # Gets a list of user's SSH keys.
@@ -227,10 +250,15 @@ class Gitlab::Client
     #
     # @param  [String] email Email address
     # @param  [Integer] user_id The ID of a user.
+    # @param  [Boolean] skip_confirmation     Skip confirmation and assume e-mail is verified
     # @return [Gitlab::ObjectifiedHash]
-    def add_email(email, user_id = nil)
+    def add_email(email, user_id = nil, skip_confirmation = nil)
       url = user_id.to_i.zero? ? '/user/emails' : "/users/#{user_id}/emails"
-      post(url, body: { email: email })
+      if skip_confirmation.nil?
+        post(url, body: { email: email })
+      else
+        post(url, body: { email: email, skip_confirmation: skip_confirmation })
+      end
     end
 
     # Delete email
@@ -261,6 +289,109 @@ class Gitlab::Client
     def user_search(search, options = {})
       options[:search] = search
       get('/users', query: options)
+    end
+
+    # Gets user custom_attributes.
+    #
+    # @example
+    #   Gitlab.user_custom_attributes(2)
+    #
+    # @param  [Integer] user_id The ID of a user.
+    # @return [Gitlab::ObjectifiedHash]
+    def user_custom_attributes(user_id)
+      get("/users/#{user_id}/custom_attributes")
+    end
+
+    # Gets single user custom_attribute.
+    #
+    # @example
+    #   Gitlab.user_custom_attribute(key, 2)
+    #
+    # @param  [String] key The custom_attributes key
+    # @param  [Integer] user_id The ID of a user.
+    # @return [Gitlab::ObjectifiedHash]
+    def user_custom_attribute(key, user_id)
+      get("/users/#{user_id}/custom_attributes/#{key}")
+    end
+
+    # Creates a new custom_attribute
+    #
+    # @example
+    #   Gitlab.add_custom_attribute('some_new_key', 'some_new_value', 2)
+    #
+    # @param  [String] key The custom_attributes key
+    # @param  [String] value The custom_attributes value
+    # @param  [Integer] user_id The ID of a user.
+    # @return [Gitlab::ObjectifiedHash]
+    def add_user_custom_attribute(key, value, user_id)
+      url = "/users/#{user_id}/custom_attributes/#{key}"
+      put(url, body: { value: value })
+    end
+
+    # Delete custom_attribute
+    # Will delete a custom_attribute
+    #
+    # @example
+    #   Gitlab.delete_user_custom_attribute('somekey', 2)
+    #
+    # @param  [String] key The custom_attribute key to delete
+    # @param  [Integer] user_id The ID of a user.
+    # @return [Boolean]
+    def delete_user_custom_attribute(key, user_id)
+      delete("/users/#{user_id}/custom_attributes/#{key}")
+    end
+
+    # Get all impersonation tokens for a user
+    #
+    # @example
+    #   Gitlab.user_impersonation_tokens(1)
+    #
+    # @param  [Integer] user_id The ID of the user.
+    # @param  [String] state Filter impersonation tokens by state {}
+    # @return [Array<Gitlab::ObjectifiedHash>]
+    def user_impersonation_tokens(user_id)
+      get("/users/#{user_id}/impersonation_tokens")
+    end
+
+    # Get impersonation token information
+    #
+    # @example
+    #   Gitlab.user_impersonation_token(1, 1)
+    #
+    # @param  [Integer] user_id The ID of the user.
+    # @param  [Integer] impersonation_token_id ID of the impersonation token.
+    # @return [Gitlab::ObjectifiedHash]
+    def user_impersonation_token(user_id, impersonation_token_id)
+      get("/users/#{user_id}/impersonation_tokens/#{impersonation_token_id}")
+    end
+
+    # Create impersonation token
+    #
+    # @example
+    #   Gitlab.create_user_impersonation_token(2, "token", ["api", "read_user"])
+    #   Gitlab.create_user_impersonation_token(2, "token", ["api", "read_user"], "1970-01-01")
+    #
+    # @param  [Integer] user_id The ID of the user.
+    # @param  [String] name Name for impersonation token.
+    # @param  [Array<String>] scopes Array of scopes for the impersonation token
+    # @param  [String] expires_at Date for impersonation token expiration in ISO format.
+    # @return [Gitlab::ObjectifiedHash]
+    def create_user_impersonation_token(user_id, name, scopes, expires_at = nil)
+      body = { name: name, scopes: scopes }
+      body[:expires_at] = expires_at if expires_at
+      post("/users/#{user_id}/impersonation_tokens", body: body)
+    end
+
+    # Revoke an impersonation token
+    #
+    # @example
+    #   Gitlab.revoke_user_impersonation_token(1, 1)
+    #
+    # @param  [Integer] user_id The ID of the user.
+    # @param  [Integer] impersonation_token_id ID of the impersonation token.
+    # @return [Gitlab::ObjectifiedHash]
+    def revoke_user_impersonation_token(user_id, impersonation_token_id)
+      delete("/users/#{user_id}/impersonation_tokens/#{impersonation_token_id}")
     end
   end
 end

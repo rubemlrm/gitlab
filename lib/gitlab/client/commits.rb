@@ -8,11 +8,11 @@ class Gitlab::Client
     #
     # @example
     #   Gitlab.commits('viking')
-    #   Gitlab.repo_commits('gitlab', { ref_name: 'api' })
+    #   Gitlab.repo_commits('gitlab', { ref: 'api' })
     #
     # @param  [Integer, String] project The ID or name of a project.
     # @param  [Hash] options A customizable set of options.
-    # @option options [String] :ref_name The branch or tag name of a project repository.
+    # @option options [String] :ref The branch or tag name of a project repository.
     # @option options [Integer] :page The page number.
     # @option options [Integer] :per_page The number of results per page.
     # @return [Array<Gitlab::ObjectifiedHash>]
@@ -35,6 +35,22 @@ class Gitlab::Client
     end
     alias repo_commit commit
 
+    # Get all references (from branches or tags) a commit is pushed to.
+    #
+    # @example
+    #   Gitlab.commit_refs(42, '6104942438c14ec7bd21c6cd5bd995272b3faff6')
+    #
+    # @param  [Integer, String] project The ID or name of a project.
+    # @param  [String] sha The commit hash
+    # @param  [Hash] options A customizable set of options.
+    # @option options [String] :type The scope of commits. Possible values `branch`, `tag`, `all`. Default is `all`.
+    # @option options [Integer] :page The page number.
+    # @option options [Integer] :per_page The number of results per page.
+    # @return [Gitlab::ObjectifiedHash]
+    def commit_refs(project, sha, options = {})
+      get("/projects/#{url_encode project}/repository/commits/#{sha}/refs", query: options)
+    end
+
     # Cherry picks a commit to a given branch.
     #
     # @example
@@ -43,9 +59,30 @@ class Gitlab::Client
     # @param  [Integer, String] project The ID or name of a project.
     # @param  [String] sha The commit hash or name of a repository branch or tag
     # @param  [String] branch The name of the branch
+    # @param  [Hash] options A customizable set of options.
+    # @option options [Boolean] :dry_run Don't commit any changes
     # @return [Gitlab::ObjectifiedHash]
-    def cherry_pick_commit(project, sha, branch)
-      post("/projects/#{url_encode project}/repository/commits/#{sha}/cherry_pick", body: { branch: branch })
+    def cherry_pick_commit(project, sha, branch, options = {})
+      options[:branch] = branch
+
+      post("/projects/#{url_encode project}/repository/commits/#{sha}/cherry_pick", body: options)
+    end
+
+    # Reverts a commit in a given branch.
+    #
+    # @example
+    #   Gitlab.revert_commit(42, '6104942438c14ec7bd21c6cd5bd995272b3faff6', 'master')
+    #
+    # @param  [Integer, String] project The ID or name of a project.
+    # @param  [String] sha The commit hash or name of a repository branch or tag
+    # @param  [String] branch The name of the branch
+    # @param  [Hash] options A customizable set of options.
+    # @option options [Boolean] :dry_run Don't commit any changes
+    # @return [Gitlab::ObjectifiedHash]
+    def revert_commit(project, sha, branch, options = {})
+      options[:branch] = branch
+
+      post("/projects/#{url_encode project}/repository/commits/#{sha}/revert", body: options)
     end
 
     # Get the diff of a commit in a project.
@@ -129,7 +166,7 @@ class Gitlab::Client
     # @option options [String] :name Filter by status name, eg. jenkins
     # @option options [String] :target_url The target URL to associate with this status
     def update_commit_status(project, sha, state, options = {})
-      post("/projects/#{url_encode project}/statuses/#{sha}", query: options.merge(state: state))
+      post("/projects/#{url_encode project}/statuses/#{sha}", body: options.merge(state: state))
     end
     alias repo_update_commit_status update_commit_status
 

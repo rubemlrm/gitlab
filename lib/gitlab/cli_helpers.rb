@@ -39,22 +39,23 @@ class Gitlab::CLI
     #
     # @return [Array]
     def required_fields(args)
-      if args.any? && args.last.is_a?(String) && args.last.start_with?('--only=')
-        args.last.gsub('--only=', '').split(',')
-      else
-        []
-      end
+      filtered_fields(args, '--only=')
     end
 
     # Returns filtered excluded fields.
     #
     # @return [Array]
     def excluded_fields(args)
-      if args.any? && args.last.is_a?(String) && args.last.start_with?('--except=')
-        args.last.gsub('--except=', '').split(',')
-      else
-        []
-      end
+      filtered_fields(args, '--except=')
+    end
+
+    # Returns fields filtered by a keyword.
+    #
+    # @return [Array]
+    def filtered_fields(args, key)
+      return [] unless args.any? && args.last.is_a?(String) && args.last.start_with?(key)
+
+      args.last.gsub(key, '').split(',')
     end
 
     # Confirms command is valid.
@@ -110,7 +111,7 @@ class Gitlab::CLI
       else
         hash_result = case data
                       when Gitlab::ObjectifiedHash, Gitlab::FileResponse
-                        record_hash([data], cmd, args, true)
+                        record_hash([data], cmd, args, single_value: true)
                       when Gitlab::PaginatedResponse
                         record_hash(data, cmd, args)
                       else
@@ -161,7 +162,7 @@ class Gitlab::CLI
     # @param  [Array]  args         Options passed to the API call
     # @param  [bool]   single_value If set to true, a single result should be returned
     # @return [Hash]   Result hash
-    def record_hash(data, cmd, args, single_value = false)
+    def record_hash(data, cmd, args, single_value: false)
       if data.empty?
         result = nil
       else
@@ -205,14 +206,10 @@ class Gitlab::CLI
 
     # Helper function to call Gitlab commands with args.
     def gitlab_helper(cmd, args = [])
-      begin
-        data = args.any? ? Gitlab.send(cmd, *args) : Gitlab.send(cmd)
-      rescue StandardError => e
-        puts e.message
-        yield if block_given?
-      end
-
-      data
+      args.any? ? Gitlab.send(cmd, *args) : Gitlab.send(cmd)
+    rescue StandardError => e
+      puts e.message
+      yield if block_given?
     end
 
     # Convert a hash (recursively) to use symbol hash keys
@@ -220,11 +217,9 @@ class Gitlab::CLI
     def symbolize_keys(hash)
       if hash.is_a?(Hash)
         hash = hash.each_with_object({}) do |(key, value), new_hash|
-          begin
-            new_hash[key.to_sym] = symbolize_keys(value)
-          rescue NoMethodError
-            raise "Error: cannot convert hash key to symbol: #{key}"
-          end
+          new_hash[key.to_sym] = symbolize_keys(value)
+        rescue NoMethodError
+          raise "Error: cannot convert hash key to symbol: #{key}"
         end
       end
 

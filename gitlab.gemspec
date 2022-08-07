@@ -20,14 +20,20 @@ Gem::Specification.new do |gem|
   gem.require_paths = ['lib']
   gem.license       = 'BSD-2-Clause'
 
-  gem.required_ruby_version = '>= 2.3'
+  gem.metadata = {
+    'homepage_uri' => gem.homepage,
+    'source_code_uri' => gem.homepage,
+    'bug_tracker_uri' => 'https://github.com/NARKOZ/gitlab/issues',
+    'changelog_uri' => 'https://github.com/NARKOZ/gitlab/releases',
+    'funding_uri' => 'https://github.com/NARKOZ/SponsorMe'
+  }
 
-  gem.add_runtime_dependency 'httparty', '~> 0.14', '>= 0.14.0'
-  gem.add_runtime_dependency 'terminal-table', '~> 1.5', '>= 1.5.1'
+  gem.required_ruby_version = '>= 2.6'
 
-  gem.add_development_dependency 'pry'
+  gem.add_runtime_dependency 'httparty', '~> 0.20'
+  gem.add_runtime_dependency 'terminal-table', '>= 1.5.1'
+
   gem.add_development_dependency 'rake'
   gem.add_development_dependency 'rspec'
-  gem.add_development_dependency 'rubocop'
   gem.add_development_dependency 'webmock'
 end

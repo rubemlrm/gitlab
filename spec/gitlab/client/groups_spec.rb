@@ -2,7 +2,7 @@
 
 require 'spec_helper'
 
-describe Gitlab::Client do
+RSpec.describe Gitlab::Client do
   describe '.groups' do
     before do
       stub_get('/groups', 'groups')
@@ -19,6 +19,17 @@ describe Gitlab::Client do
     it 'returns a paginated response of groups' do
       expect(@groups).to be_a Gitlab::PaginatedResponse
       expect(@groups.first.path).to eq('threegroup')
+    end
+  end
+
+  describe '.group' do
+    before do
+      stub_get('/groups/3?with_projects=false', 'group')
+      @group = Gitlab.group(3, with_projects: false)
+    end
+
+    it 'gets the correct resource' do
+      expect(a_get('/groups/3?with_projects=false')).to have_been_made
     end
   end
 
@@ -109,6 +120,57 @@ describe Gitlab::Client do
     end
 
     it "returns information about a group's members" do
+      expect(@members).to be_a Gitlab::PaginatedResponse
+      expect(@members.size).to eq(2)
+      expect(@members[1].name).to eq('John Smith')
+    end
+  end
+
+  describe '.all_group_members' do
+    before do
+      stub_get('/groups/3/members/all', 'group_members')
+      @all_members = Gitlab.all_group_members(3)
+    end
+
+    it 'gets the correct resource' do
+      expect(a_get('/groups/3/members/all')).to have_been_made
+    end
+
+    it "returns information about a group's members" do
+      expect(@all_members).to be_a Gitlab::PaginatedResponse
+      expect(@all_members.size).to eq(2)
+      expect(@all_members[1].name).to eq('John Smith')
+    end
+  end
+
+  describe '.group_descendants' do
+    before do
+      stub_get('/groups/3/descendant_groups', 'group_descendants')
+      @descendants = Gitlab.group_descendants(3)
+    end
+
+    it 'gets the correct resource' do
+      expect(a_get('/groups/3/descendant_groups')).to have_been_made
+    end
+
+    it "returns information about a group's descendants" do
+      expect(@descendants).to be_a Gitlab::PaginatedResponse
+      expect(@descendants.size).to eq(2)
+      expect(@descendants[1].name).to eq('Foobar Group 2')
+    end
+  end
+
+  describe '.group_billable_members' do
+    before do
+      stub_get('/groups/3/billable_members', 'group_billable_members')
+      @members = Gitlab.group_billable_members(3)
+    end
+
+    it 'gets the correct resource' do
+      expect(a_get('/groups/3/billable_members')).to have_been_made
+    end
+
+    it "returns information about a group's billable members" do
       expect(@members).to be_a Gitlab::PaginatedResponse
       expect(@members.size).to eq(2)
       expect(@members[1].name).to eq('John Smith')
@@ -230,18 +292,157 @@ describe Gitlab::Client do
   end
 
   describe '.edit_group' do
-    context 'using group ID' do
+    before do
+      stub_put('/groups/1', 'group_edit').with(body: { description: 'An interesting group' })
+      @edited_project = Gitlab.edit_group(1, description: 'An interesting group')
+    end
+
+    it 'gets the correct resource' do
+      expect(a_put('/groups/1').with(body: { description: 'An interesting group' })).to have_been_made
+    end
+
+    it 'returns information about an edited group' do
+      expect(@edited_project.description).to eq('An interesting group')
+    end
+  end
+
+  describe '.group_issues' do
+    before do
+      stub_get('/groups/3/issues', 'group_issues')
+      @issues = Gitlab.group_issues(3)
+    end
+
+    it 'gets the correct resource' do
+      expect(a_get('/groups/3/issues')).to have_been_made
+    end
+
+    it "returns a paginated response of project's issues" do
+      expect(@issues).to be_a Gitlab::PaginatedResponse
+      expect(@issues.first.project_id).to eq(4)
+    end
+  end
+
+  describe '.group_merge_requests' do
+    before do
+      stub_get('/groups/3/merge_requests', 'group_merge_requests')
+      @merge_requests = Gitlab.group_merge_requests(3)
+    end
+
+    it 'gets the correct resource' do
+      expect(a_get('/groups/3/merge_requests')).to have_been_made
+    end
+
+    it "returns information about a group's merge requests" do
+      expect(@merge_requests).to be_a Gitlab::PaginatedResponse
+      expect(@merge_requests.first.project_id).to eq(3)
+    end
+  end
+
+  describe '.sync_ldap_group' do
+    before do
+      stub_post('/groups/1/ldap_sync', 'group_ldap_sync')
+      Gitlab.sync_ldap_group(1)
+    end
+
+    it 'gets the correct resource' do
+      expect(a_post('/groups/1/ldap_sync')).to have_been_made
+    end
+  end
+
+  describe '.add_ldap_group_links' do
+    before do
+      stub_post('/groups/1/ldap_group_links', 'group_add_ldap_links')
+      @ldap_link = Gitlab.add_ldap_group_links(1, 'all', 50, 'ldap')
+    end
+
+    it 'gets the correct resource' do
+      expect(a_post('/groups/1/ldap_group_links')
+          .with(body: { cn: 'all', group_access: 50, provider: 'ldap' })).to have_been_made
+    end
+
+    it 'returns information about the created ldap link' do
+      expect(@ldap_link.cn).to eq('all')
+      expect(@ldap_link.group_access).to eq(50)
+      expect(@ldap_link.provider).to eq('ldap')
+    end
+  end
+
+  describe '.delete_ldap_group_links' do
+    before do
+      stub_delete('/groups/1/ldap_group_links/ldap/all', 'group_delete_ldap_links')
+      Gitlab.delete_ldap_group_links(1, 'all', 'ldap')
+    end
+
+    it 'gets the correct resource' do
+      expect(a_delete('/groups/1/ldap_group_links/ldap/all')).to have_been_made
+    end
+  end
+
+  describe '.group_custom_attributes' do
+    before do
+      stub_get('/groups/2/custom_attributes', 'group_custom_attributes')
+      @custom_attributes = Gitlab.group_custom_attributes(2)
+    end
+
+    it 'gets the correct resource' do
+      expect(a_get('/groups/2/custom_attributes')).to have_been_made
+    end
+
+    it 'returns a information about a custom_attribute of group' do
+      expect(@custom_attributes.first.key).to eq 'somekey'
+      expect(@custom_attributes.last.value).to eq('somevalue2')
+    end
+  end
+
+  describe '.group_custom_attribute' do
+    before do
+      stub_get('/groups/2/custom_attributes/some_new_key', 'group_custom_attribute')
+      @custom_attribute = Gitlab.group_custom_attribute('some_new_key', 2)
+    end
+
+    it 'gets the correct resource' do
+      expect(a_get('/groups/2/custom_attributes/some_new_key')).to have_been_made
+    end
+
+    it 'returns a information about the single custom_attribute of group' do
+      expect(@custom_attribute.key).to eq 'some_new_key'
+      expect(@custom_attribute.value).to eq('some_new_value')
+    end
+  end
+
+  describe '.add_custom_attribute' do
+    describe 'with group ID' do
       before do
-        stub_put('/groups/1', 'group_edit').with(body: { description: 'An interesting group' })
-        @edited_project = Gitlab.edit_group(1, description: 'An interesting group')
+        stub_put('/groups/2/custom_attributes/some_new_key', 'group_custom_attribute')
+        @custom_attribute = Gitlab.add_group_custom_attribute('some_new_key', 'some_new_value', 2)
       end
 
       it 'gets the correct resource' do
-        expect(a_put('/groups/1').with(body: { description: 'An interesting group' })).to have_been_made
+        body = { value: 'some_new_value' }
+        expect(a_put('/groups/2/custom_attributes/some_new_key').with(body: body)).to have_been_made
+        expect(a_put('/groups/2/custom_attributes/some_new_key')).to have_been_made
       end
 
-      it 'returns information about an edited group' do
-        expect(@edited_project.description).to eq('An interesting group')
+      it 'returns information about a new custom attribute' do
+        expect(@custom_attribute.key).to eq 'some_new_key'
+        expect(@custom_attribute.value).to eq 'some_new_value'
+      end
+    end
+  end
+
+  describe '.delete_custom_attribute' do
+    describe 'with group ID' do
+      before do
+        stub_delete('/groups/2/custom_attributes/some_new_key', 'group_custom_attribute')
+        @custom_attribute = Gitlab.delete_group_custom_attribute('some_new_key', 2)
+      end
+
+      it 'gets the correct resource' do
+        expect(a_delete('/groups/2/custom_attributes/some_new_key')).to have_been_made
+      end
+
+      it 'returns information about a deleted custom_attribute' do
+        expect(@custom_attribute).to be_truthy
       end
     end
   end

@@ -2,7 +2,7 @@
 
 require 'spec_helper'
 
-describe Gitlab::Client do
+RSpec.describe Gitlab::Client do
   describe '.users' do
     before do
       stub_get('/users', 'users')
@@ -55,11 +55,11 @@ describe Gitlab::Client do
     context 'when successful request' do
       before do
         stub_post('/users', 'user')
-        @user = Gitlab.create_user('email', 'pass')
+        @user = Gitlab.create_user('email', 'pass', 'john.smith')
       end
 
       it 'gets the correct resource' do
-        body = { email: 'email', password: 'pass', name: 'email' }
+        body = { email: 'email', password: 'pass', username: 'john.smith', name: 'email' }
         expect(a_post('/users').with(body: body)).to have_been_made
       end
 
@@ -72,8 +72,16 @@ describe Gitlab::Client do
       it 'throws an exception' do
         stub_post('/users', 'error_already_exists', 409)
         expect do
-          Gitlab.create_user('email', 'pass')
+          Gitlab.create_user('email', 'pass', 'john.smith')
         end.to raise_error(Gitlab::Error::Conflict, "Server responded with code 409, message: 409 Already exists. Request URI: #{Gitlab.endpoint}/users")
+      end
+    end
+
+    context 'when not enough arguments' do
+      it 'throws an exception' do
+        expect do
+          Gitlab.create_user('email', 'pass')
+        end.to raise_error(ArgumentError, 'Missing required parameters')
       end
     end
   end
@@ -86,7 +94,7 @@ describe Gitlab::Client do
       end
 
       it 'gets the correct resource' do
-        body = { email: 'email', password: 'pass', username: 'username' }
+        body = { email: 'email', password: 'pass', username: 'username', name: 'email' }
         expect(a_post('/users').with(body: body)).to have_been_made
       end
 
@@ -162,6 +170,21 @@ describe Gitlab::Client do
     end
   end
 
+  describe '.approve_user' do
+    before do
+      stub_post('/users/1/approve', 'user_approve')
+      @result = Gitlab.approve_user(1)
+    end
+
+    it 'gets the correct resource' do
+      expect(a_post('/users/1/approve')).to have_been_made
+    end
+
+    it 'returns boolean' do
+      expect(@result).to eq(true)
+    end
+  end
+
   describe '.session' do
     after do
       Gitlab.endpoint = 'https://api.example.com'
@@ -199,6 +222,22 @@ describe Gitlab::Client do
         expect(@session.email).to eq('john@example.com')
         expect(@session.private_token).to eq('qEsq1pt6HJPaNciie3MG')
       end
+    end
+  end
+
+  describe '.activities' do
+    before do
+      stub_get('/user/activities', 'activities')
+      @activities = Gitlab.activities
+    end
+
+    it 'gets the correct resource' do
+      expect(a_get('/user/activities')).to have_been_made
+    end
+
+    it 'returns a paginated response of user activity' do
+      expect(@activities).to be_a Gitlab::PaginatedResponse
+      expect(@activities.first.username).to eq('someuser')
     end
   end
 
@@ -452,6 +491,145 @@ describe Gitlab::Client do
     it 'returns an array of users found' do
       expect(@users.first.id).to eq(1)
       expect(@users.last.id).to eq(2)
+    end
+  end
+
+  describe '.user_custom_attributes' do
+    before do
+      stub_get('/users/2/custom_attributes', 'user_custom_attributes')
+      @custom_attributes = Gitlab.user_custom_attributes(2)
+    end
+
+    it 'gets the correct resource' do
+      expect(a_get('/users/2/custom_attributes')).to have_been_made
+    end
+
+    it 'returns a information about a custom_attribute of user' do
+      expect(@custom_attributes.first.key).to eq 'somekey'
+      expect(@custom_attributes.last.value).to eq('somevalue2')
+    end
+  end
+
+  describe '.user_custom_attribute' do
+    before do
+      stub_get('/users/2/custom_attributes/some_new_key', 'user_custom_attribute')
+      @custom_attribute = Gitlab.user_custom_attribute('some_new_key', 2)
+    end
+
+    it 'gets the correct resource' do
+      expect(a_get('/users/2/custom_attributes/some_new_key')).to have_been_made
+    end
+
+    it 'returns a information about the single custom_attribute of user' do
+      expect(@custom_attribute.key).to eq 'some_new_key'
+      expect(@custom_attribute.value).to eq('some_new_value')
+    end
+  end
+
+  describe '.add_custom_attribute' do
+    describe 'with user ID' do
+      before do
+        stub_put('/users/2/custom_attributes/some_new_key', 'user_custom_attribute')
+        @custom_attribute = Gitlab.add_user_custom_attribute('some_new_key', 'some_new_value', 2)
+      end
+
+      it 'gets the correct resource' do
+        body = { value: 'some_new_value' }
+        expect(a_put('/users/2/custom_attributes/some_new_key').with(body: body)).to have_been_made
+        expect(a_put('/users/2/custom_attributes/some_new_key')).to have_been_made
+      end
+
+      it 'returns information about a new custom attribute' do
+        expect(@custom_attribute.key).to eq 'some_new_key'
+        expect(@custom_attribute.value).to eq 'some_new_value'
+      end
+    end
+  end
+
+  describe '.delete_custom_attribute' do
+    describe 'with user ID' do
+      before do
+        stub_delete('/users/2/custom_attributes/some_new_key', 'user_custom_attribute')
+        @custom_attribute = Gitlab.delete_user_custom_attribute('some_new_key', 2)
+      end
+
+      it 'gets the correct resource' do
+        expect(a_delete('/users/2/custom_attributes/some_new_key')).to have_been_made
+      end
+
+      it 'returns information about a deleted custom_attribute' do
+        expect(@custom_attribute).to be_truthy
+      end
+    end
+  end
+
+  describe 'impersonation tokens' do
+    describe 'get all' do
+      before do
+        stub_get('/users/2/impersonation_tokens', 'impersonation_get_all')
+        @tokens = Gitlab.user_impersonation_tokens(2)
+      end
+
+      it 'gets the correct resource' do
+        expect(a_get('/users/2/impersonation_tokens')).to have_been_made
+      end
+
+      it 'gets an array of user impersonation tokens' do
+        expect(@tokens.first.id).to eq(2)
+        expect(@tokens.last.id).to eq(3)
+        expect(@tokens.first.impersonation).to be_truthy
+        expect(@tokens.last.impersonation).to be_truthy
+      end
+    end
+  end
+
+  describe 'get one' do
+    before do
+      stub_get('/users/2/impersonation_tokens/2', 'impersonation_get')
+      @token = Gitlab.user_impersonation_token(2, 2)
+    end
+
+    it 'gets the correct resource' do
+      expect(a_get('/users/2/impersonation_tokens/2')).to have_been_made
+    end
+
+    it 'gets a user impersonation token' do
+      expect(@token.user_id).to eq(2)
+      expect(@token.id).to eq(2)
+      expect(@token.impersonation).to be_truthy
+    end
+  end
+
+  describe 'create' do
+    before do
+      stub_post('/users/2/impersonation_tokens', 'impersonation_create')
+      @token = Gitlab.create_user_impersonation_token(2, 'mytoken', ['api'])
+    end
+
+    it 'gets the correct resource' do
+      expect(a_post('/users/2/impersonation_tokens').with(body: 'name=mytoken&scopes%5B%5D=api')).to have_been_made
+    end
+
+    it 'returns a valid impersonation token' do
+      expect(@token.user_id).to eq(2)
+      expect(@token.id).to eq(2)
+      expect(@token.impersonation).to be_truthy
+      expect(@token.active).to be_truthy
+      expect(@token.token).to eq('EsMo-vhKfXGwX9RKrwiy')
+    end
+  end
+
+  describe 'revoke' do
+    before do
+      stub_request(:delete, "#{Gitlab.endpoint}/users/2/impersonation_tokens/2")
+        .with(headers: { 'PRIVATE-TOKEN' => Gitlab.private_token })
+        .to_return(status: 204)
+      @token = Gitlab.revoke_user_impersonation_token(2, 2)
+    end
+
+    it 'removes a token' do
+      expect(a_delete('/users/2/impersonation_tokens/2')).to have_been_made
+      expect(@token.to_hash).to be_empty
     end
   end
 end

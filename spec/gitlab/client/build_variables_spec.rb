@@ -2,7 +2,7 @@
 
 require 'spec_helper'
 
-describe Gitlab::Client do
+RSpec.describe Gitlab::Client do
   describe '.variables' do
     before do
       stub_get('/projects/3/variables', 'variables')
@@ -38,7 +38,7 @@ describe Gitlab::Client do
 
   describe '.create_variable' do
     before do
-      stub_post('/projects/3/variables', 'variable')
+      stub_post('/projects/3/variables', 'variable', { masked: true })
       @variable = Gitlab.create_variable(3, 'NEW_VARIABLE', 'new value')
     end
 
