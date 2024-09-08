@@ -7,7 +7,7 @@ require File.expand_path('../lib/gitlab', __dir__)
 require File.expand_path('../lib/gitlab/cli', __dir__)
 
 def load_fixture(name)
-  name, extension = name.split('.')
+  name, extension = name.split('.', 2)
   File.new(File.dirname(__FILE__) + "/fixtures/#{name}.#{extension || 'json'}")
 end
 
@@ -36,7 +36,7 @@ RSpec.configure do |config|
   Kernel.srand config.seed
 end
 
-%i[get post put delete].each do |method|
+%i[get post put delete patch].each do |method|
   define_method "stub_#{method}" do |path, fixture, status_code = 200|
     stub_request(method, "#{Gitlab.endpoint}#{path}")
       .with(headers: { 'PRIVATE-TOKEN' => Gitlab.private_token })

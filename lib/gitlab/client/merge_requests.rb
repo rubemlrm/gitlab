@@ -59,6 +59,18 @@ class Gitlab::Client
       get("/projects/#{url_encode project}/merge_requests/#{id}/pipelines")
     end
 
+    # Shows information about the merge request dependencies that must be resolved before merging.
+    #
+    # @example
+    #   Gitlab.merge_request_dependencies(5, 36)
+    #
+    # @param  [Integer, String] project The ID or name of a project.
+    # @param  [Integer] id The ID of a merge request.
+    # @return [Array<Gitlab::ObjectifiedHash>]
+    def merge_request_dependencies(project, id)
+      get("/projects/#{url_encode project}/merge_requests/#{id}/blocks")
+    end
+
     # Create a new pipeline for a merge request.
     # A pipeline created via this endpoint doesnt run a regular branch/tag pipeline.
     # It requires .gitlab-ci.yml to be configured with only: [merge_requests] to create jobs.
@@ -223,9 +235,11 @@ class Gitlab::Client
     #   Gitlab.merge_request_discussions('gitlab', 1)
     # @param  [Integer, String] project The ID or name of a project.
     # @param  [Integer] id The ID of a merge request.
+    # @option options [Integer] :page The page number.
+    # @option options [Integer] :per_page The number of results per page.
     # @return [Gitlab::ObjectifiedHash] List of the merge request discussions.
-    def merge_request_discussions(project, merge_request_id)
-      get("/projects/#{url_encode project}/merge_requests/#{merge_request_id}/discussions")
+    def merge_request_discussions(project, merge_request_id, options = {})
+      get("/projects/#{url_encode project}/merge_requests/#{merge_request_id}/discussions", query: options)
     end
 
     # Get single merge request discussion
@@ -342,6 +356,18 @@ class Gitlab::Client
     # @return [Gitlab::ObjectifiedHash] An empty response.
     def delete_merge_request(project, merge_request_id)
       delete("/projects/#{url_encode project}/merge_requests/#{merge_request_id}")
+    end
+
+    # Gets a list of merge request diffs
+    #
+    # @example
+    #   Gitlab.merge_request_diffs(5, 1)
+    #   Gitlab.merge_request_diffs('gitlab', 1)
+    # @param  [Integer, String] project The ID or name of a project.
+    # @param  [Integer] id The ID of a merge request.
+    # @return [Gitlab::ObjectifiedHash] A list of the merge request diffs.
+    def merge_request_diffs(project, merge_request_id)
+      get("/projects/#{url_encode project}/merge_requests/#{merge_request_id}/diffs")
     end
 
     # Gets a list of merge request diff versions
